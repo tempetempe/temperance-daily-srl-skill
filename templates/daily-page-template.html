@@ -1,0 +1,435 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>今日学习计划</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #25302c;
+      --muted: #68716d;
+      --line: rgba(44, 53, 49, .13);
+      --paper: #f7f5ef;
+      --panel: #fffdfa;
+      --accent: #346b55;
+      --danger: #a8483f;
+      font-family: "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--ink);
+      background: linear-gradient(180deg, #fbfaf6 0, var(--paper) 36rem);
+    }
+    button, input, textarea { font: inherit; }
+    button { cursor: pointer; }
+    .shell { width: min(1040px, calc(100% - 32px)); margin: 0 auto; padding: 54px 0 80px; }
+    .hero { display: flex; justify-content: space-between; gap: 28px; align-items: end; margin-bottom: 28px; }
+    .eyebrow { margin: 0 0 8px; color: var(--accent); font-size: 13px; font-weight: 700; letter-spacing: .14em; }
+    h1 { margin: 0; font-size: clamp(32px, 6vw, 54px); letter-spacing: -.055em; line-height: 1.04; }
+    .subtitle { max-width: 620px; margin: 14px 0 0; color: var(--muted); line-height: 1.75; }
+    .date-box { flex: 0 0 auto; min-width: 146px; padding: 15px 18px; border: 1px solid var(--line); border-radius: 18px; background: var(--panel); text-align: right; box-shadow: 0 14px 38px rgba(37, 50, 45, .06); }
+    .date-box span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+    .date-box strong { font-size: 17px; }
+    .notice { margin-bottom: 20px; padding: 12px 16px; border: 1px dashed rgba(47, 105, 82, .35); border-radius: 14px; color: var(--muted); background: rgba(255,255,255,.55); font-size: 13px; line-height: 1.65; }
+    .task-list { display: grid; gap: 22px; }
+    .task-card {
+      --card-bg: #e9f4ee;
+      --card-line: #b6d6c5;
+      --card-accent: #4d8b6d;
+      position: relative; overflow: hidden; border: 1px solid var(--card-line); border-radius: 25px; background: var(--card-bg); box-shadow: 0 16px 42px rgba(48, 58, 53, .08);
+    }
+    .task-card.notice-state { --card-bg: #fff2b8; --card-line: #dfbb3f; --card-accent: #ad7f00; }
+    .task-card.focus-state { --card-bg: #ffe1d7; --card-line: #e2a28e; --card-accent: #ba614a; }
+    .card-head { position: relative; display: flex; justify-content: space-between; align-items: center; gap: 16px; min-height: 64px; padding: 20px 24px 14px; }
+    .task-number { color: rgba(37, 50, 45, .66); font-size: 13px; font-weight: 700; letter-spacing: .08em; }
+    .state-label { min-height: 29px; padding: 5px 11px; border: 1px solid rgba(57, 64, 46, .16); border-radius: 99px; background: rgba(255,255,255,.48); font-size: 13px; font-weight: 700; }
+    .card-body { position: relative; padding: 4px 24px 24px; }
+    .section { padding: 20px; border: 1px solid color-mix(in srgb, var(--card-line) 72%, #fff); border-radius: 18px; background: rgba(255,255,255,.72); }
+    .section + .section { margin-top: 14px; }
+    .section-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin: 0 0 15px; }
+    .section-title h2 { margin: 0; font-size: 17px; letter-spacing: -.02em; }
+    .section-title span { color: var(--muted); font-size: 12px; }
+    .field-grid { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(150px, .7fr) minmax(150px, .7fr); gap: 14px; align-items: start; }
+    .field { display: grid; gap: 7px; min-width: 0; }
+    .field label { color: #56635d; font-size: 12px; font-weight: 700; }
+    input, textarea {
+      width: 100%; border: 1px solid rgba(39, 59, 49, .18); border-radius: 12px; color: var(--ink); background: rgba(255,255,255,.78); outline: none; transition: border-color .15s, box-shadow .15s;
+    }
+    input { min-height: 46px; padding: 10px 12px; }
+    textarea { min-height: 82px; padding: 11px 12px; line-height: 1.55; resize: vertical; }
+    input:focus, textarea:focus { border-color: var(--card-accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--card-accent) 16%, transparent); }
+    .coaching { border-left: 4px solid var(--card-accent); }
+    .coaching-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
+    .coaching-grid .wide { grid-column: 1 / -1; }
+    .choice-group { display: flex; flex-wrap: wrap; gap: 8px; }
+    .choice { position: relative; }
+    .choice input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+    .choice span { display: block; padding: 9px 12px; border: 1px solid rgba(39, 59, 49, .16); border-radius: 11px; background: rgba(255,255,255,.78); color: #515b57; font-size: 13px; cursor: pointer; }
+    .choice input:checked + span { border-color: var(--card-accent); color: var(--ink); background: #fff; box-shadow: 0 0 0 2px color-mix(in srgb, var(--card-accent) 14%, transparent); font-weight: 700; }
+    .choice input:focus-visible + span { outline: 3px solid color-mix(in srgb, var(--card-accent) 34%, transparent); outline-offset: 2px; }
+    .review-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(180px, .48fr); gap: 16px; align-items: start; }
+    .review-grid .full { grid-column: 1 / -1; }
+    .review-section { border-top: 4px solid color-mix(in srgb, var(--card-accent) 64%, #fff); }
+    .review-note { min-height: 142px; }
+    .diary-card { margin-top: 24px; padding: 24px; border: 1px solid #d8d1c4; border-radius: 24px; background: #fffdfa; box-shadow: 0 16px 42px rgba(48, 58, 53, .07); }
+    .diary-card textarea { min-height: 180px; background: #fff; }
+    .helper { margin: -6px 0 14px; color: var(--muted); font-size: 13px; line-height: 1.65; }
+    .actions { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 24px; padding: 13px 14px 13px 18px; border: 1px solid var(--line); border-radius: 18px; background: rgba(251, 250, 246, .9); box-shadow: 0 18px 48px rgba(32, 48, 40, .14); }
+    .status { min-height: 22px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .status.error { color: var(--danger); }
+    .button-group { display: flex; gap: 10px; }
+    .button { min-height: 43px; padding: 9px 15px; border: 1px solid rgba(43, 62, 53, .17); border-radius: 12px; color: var(--ink); background: #fff; font-weight: 700; }
+    .button.primary { border-color: var(--accent); color: #fff; background: var(--accent); }
+    .empty { padding: 54px 24px; border: 1px dashed var(--line); border-radius: 22px; text-align: center; color: var(--muted); background: var(--panel); }
+    @media (max-width: 780px) {
+      .shell { width: min(100% - 22px, 680px); padding-top: 30px; }
+      .hero { align-items: start; flex-direction: column; }
+      .date-box { text-align: left; }
+      .field-grid, .coaching-grid, .review-grid { grid-template-columns: 1fr; }
+      .coaching-grid .wide { grid-column: auto; }
+      .review-grid .full { grid-column: auto; }
+      .card-head { padding-inline: 17px; }
+      .card-body { padding: 3px 14px 16px; }
+      .section { padding: 16px; }
+      .actions { align-items: stretch; flex-direction: column; }
+      .button-group { width: 100%; }
+      .button { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">每日自主学习</p>
+        <h1>今日学习计划</h1>
+        <p class="subtitle">这是我们刚刚一起确认的安排。修改会自动暂存，不等于复盘已完成；任务做完后，填写复盘并点击“保存今日复盘”。任务备注和今日小记可以留空。</p>
+      </div>
+      <div class="date-box"><span>计划日期</span><strong id="page-date">—</strong></div>
+    </header>
+
+    <div id="preview-notice" class="notice" hidden>这里是页面预览。你可以体验编辑，但修改不会保存；需要保存时，请从对话中打开今天的学习页面。</div>
+    <section id="task-list" class="task-list" aria-live="polite"></section>
+
+    <section class="diary-card">
+      <div class="section-title"><h2>今日小记</h2><span>选填</span></div>
+      <p class="helper">这里写的是今天整体。下面只是一些提示，不需要逐条回答，你可以自由写下任何想留下来的内容。</p>
+      <textarea id="daily-diary" placeholder="今天的心情怎么样？&#10;今天有什么让你印象比较深的事情或发现？&#10;有什么是你觉得自己处理得不错、想肯定一下自己的？&#10;有没有什么经验、教训，或者下次值得记住的？&#10;有没有什么还没想明白、想继续讨论或想解决的问题？&#10;有没有什么想对之后的自己说的话？&#10;或者写下任何今天你想留下来的东西。"></textarea>
+    </section>
+
+    <footer class="actions">
+      <div id="status" class="status" role="status">正在准备页面……</div>
+      <div class="button-group">
+        <button id="reload-button" class="button" type="button">重新读取已保存内容</button>
+        <button id="save-button" class="button primary" type="button">保存今日复盘</button>
+      </div>
+    </footer>
+  </main>
+
+  <script id="initial-state" type="application/json">__DAILY_PAGE_STATE_JSON__</script>
+  <script>
+    const API_PATH = "/api/daily-page-state";
+    const PREVIEW_TOKEN = "__" + "DAILY_PAGE_STATE_JSON" + "__";
+    const initialText = document.getElementById("initial-state").textContent.trim();
+    const previewMode = location.protocol === "file:" || initialText === PREVIEW_TOKEN;
+    const sampleState = {
+      schema_version: 2,
+      page_date: new Date().toISOString().slice(0, 10),
+      generated_at: new Date().toISOString(),
+      saved_at: null,
+      tasks: [
+        {
+          task_id: "task-preview-001", source_confidence: "confident", visual_state: "normal", coaching_result: null,
+          final_plan: { task: "完成英语阅读练习", planned_start: "19:00", estimated_duration_minutes: 30 },
+          review: { completion: "", completion_details: "", actual_duration_minutes: null, expectation: "", task_note: "" }
+        },
+        {
+          task_id: "task-preview-002", source_confidence: "uncertain", visual_state: "notice",
+          coaching_result: { main_obstacles: ["今天课堂上的函数图像还没有完全听懂"], actions: ["先看课堂例题，再做两道同类型题确认理解"], resources: ["课堂笔记第 12 页", "老师发的例题讲解"], help_or_communication: [], other_confirmed_information: [] },
+          final_plan: { task: "订正数学练习", planned_start: "19:40", estimated_duration_minutes: 45 },
+          review: { completion: "", completion_details: "", actual_duration_minutes: null, expectation: "", task_note: "" }
+        },
+        {
+          task_id: "task-preview-003", source_confidence: "not_confident", visual_state: "focus",
+          coaching_result: { main_obstacles: ["今晚可用时间与作业量冲突"], actions: ["先确认不可变的提交要求"], resources: [], help_or_communication: ["向老师说明今晚的现实时间并确认可否调整截止时间"], other_confirmed_information: ["未确认新要求前不自行降低交付标准"] },
+          final_plan: { task: "完成实验报告", planned_start: "20:30", estimated_duration_minutes: 60 },
+          review: { completion: "", completion_details: "", actual_duration_minutes: null, expectation: "", task_note: "" }
+        }
+      ],
+      daily_diary: ""
+    };
+    let state = previewMode ? sampleState : JSON.parse(initialText);
+
+    const taskList = document.getElementById("task-list");
+    const status = document.getElementById("status");
+    const saveButton = document.getElementById("save-button");
+    const reloadButton = document.getElementById("reload-button");
+    const dailyDiary = document.getElementById("daily-diary");
+
+    function escapeHtml(value) {
+      return String(value).replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
+    }
+    function lines(value) { return Array.isArray(value) ? value.join("\n") : ""; }
+    function parseLines(value) { return value.split(/\r?\n/).map(item => item.trim()).filter(Boolean); }
+    function setStatus(message, isError = false) {
+      status.textContent = message;
+      status.classList.toggle("error", isError);
+    }
+    function chineseErrorMessage(error, fallback) {
+      const message = error instanceof Error ? error.message : "";
+      return /[\u3400-\u9fff]/.test(message) ? message : fallback;
+    }
+    function visualLabel(visualState) {
+      if (visualState === "notice") return "留意一下";
+      if (visualState === "focus") return "重点关注";
+      return "";
+    }
+    function renderTextarea(taskId, scope, field, label, value, wide = false, placeholder = "") {
+      return `<div class="field${wide ? " wide" : ""}"><label>${label}</label><textarea data-task-id="${escapeHtml(taskId)}" data-scope="${scope}" data-field="${field}" placeholder="${escapeHtml(placeholder)}">${escapeHtml(lines(value))}</textarea></div>`;
+    }
+    function coachingSection(task) {
+      const value = task.coaching_result;
+      if (!value) return "";
+      const fields = [
+        ["main_obstacles", "目前最卡的地方", false],
+        ["actions", "我们商量好的应对方式", false],
+        ["resources", "手上能用的资源", false],
+        ["help_or_communication", "需要找谁帮忙，或要沟通什么", false],
+        ["other_confirmed_information", "还有这些需要记住", true]
+      ].filter(([field]) => Array.isArray(value[field]) && value[field].length > 0);
+      if (!fields.length) return "";
+      return `<section class="section coaching">
+        <div class="section-title"><h2>关于这项任务</h2><span>刚才一起确认的内容</span></div>
+        <div class="coaching-grid">
+          ${fields.map(([field, label, wide]) => renderTextarea(task.task_id, "coaching", field, label, value[field], wide)).join("")}
+        </div>
+      </section>`;
+    }
+    function choiceGroup(taskId, field, selected, options) {
+      return `<div class="choice-group">${options.map(([value, label]) => `<label class="choice"><input type="radio" name="${escapeHtml(taskId)}-${field}" value="${value}" data-task-id="${escapeHtml(taskId)}" data-scope="review" data-field="${field}" ${selected === value ? "checked" : ""}><span>${label}</span></label>`).join("")}</div>`;
+    }
+    function reviewDetailCopy(completion) {
+      if (completion === "partial") return { label: "哪部分没有完成？", placeholder: "可以简单记下已经完成的部分，以及还没有完成的部分。" };
+      if (completion === "not_completed") return { label: "这次没有完成，发生了什么？", placeholder: "可以简单记下当时的情况或主要原因。" };
+      return { label: "实际安排发生了什么变化？", placeholder: "可以简单记下时间、顺序或任务内容发生了什么变化。" };
+    }
+    function reviewSection(task) {
+      const review = task.review;
+      const showDetails = ["partial", "not_completed", "changed"].includes(review.completion);
+      const detailCopy = reviewDetailCopy(review.completion);
+      return `<section class="section review-section">
+        <div class="section-title"><h2>做完后，回来记一下</h2><span>计划和复盘在同一张卡片里</span></div>
+        <div class="review-grid">
+          <div class="field full">
+            <label>完成情况</label>
+            ${choiceGroup(task.task_id, "completion", review.completion, [["completed", "已完成"], ["partial", "部分完成"], ["not_completed", "未完成"], ["changed", "实际安排发生变化"]])}
+          </div>
+          <div class="field review-detail full" data-review-detail-for="${escapeHtml(task.task_id)}" ${showDetails ? "" : "hidden"}>
+            <label data-review-detail-label>${detailCopy.label}</label>
+            <textarea data-task-id="${escapeHtml(task.task_id)}" data-scope="review" data-field="completion_details" placeholder="${detailCopy.placeholder}">${escapeHtml(review.completion_details)}</textarea>
+          </div>
+          <div class="field">
+            <label>实际用了多久（分钟）</label>
+            <input type="number" min="0" step="1" data-task-id="${escapeHtml(task.task_id)}" data-scope="review" data-field="actual_duration_minutes" value="${review.actual_duration_minutes ?? ""}" placeholder="例如：40；未开始可填 0">
+          </div>
+          <div class="field full">
+            <label>和原先的预期相比，这项任务怎么样？</label>
+            ${choiceGroup(task.task_id, "expectation", review.expectation, [["better", "比预想更好"], ["as_expected", "和预想差不多"], ["below_expected", "没有达到预期"]])}
+          </div>
+          <div class="field full">
+            <label>关于这个任务，还有什么想记下来的吗？</label>
+            <textarea class="review-note" data-task-id="${escapeHtml(task.task_id)}" data-scope="review" data-field="task_note" placeholder="有什么是你觉得自己处理得不错的？\n今天这件事让你发现了什么？\n有没有什么经验或教训值得记下来？\n如果再来一次，有什么想调整的？\n有没有什么还没想明白、想继续解决的问题？\n或者写下任何你想留下来的话。">${escapeHtml(review.task_note)}</textarea>
+          </div>
+        </div>
+      </section>`;
+    }
+    function render() {
+      document.getElementById("page-date").textContent = state.page_date;
+      dailyDiary.value = state.daily_diary || "";
+      if (!state.tasks.length) {
+        taskList.innerHTML = `<div class="empty">今天还没有需要安排的学习任务。</div>`;
+        return;
+      }
+      taskList.innerHTML = state.tasks.map((task, index) => {
+        const label = visualLabel(task.visual_state);
+        return `<article class="task-card ${task.visual_state === "notice" ? "notice-state" : task.visual_state === "focus" ? "focus-state" : ""}" data-task-id="${escapeHtml(task.task_id)}">
+          <header class="card-head"><span class="task-number">任务 ${String(index + 1).padStart(2, "0")}</span>${label ? `<span class="state-label">${label}</span>` : ""}</header>
+          <div class="card-body">
+            <section class="section">
+              <div class="section-title"><h2>今天的安排</h2><span>可以直接修改</span></div>
+              <div class="field-grid">
+                <div class="field"><label>任务</label><input data-task-id="${escapeHtml(task.task_id)}" data-scope="plan" data-field="task" value="${escapeHtml(task.final_plan.task)}"></div>
+                <div class="field"><label>准备什么时候做</label><input data-task-id="${escapeHtml(task.task_id)}" data-scope="plan" data-field="planned_start" value="${escapeHtml(task.final_plan.planned_start)}"></div>
+                <div class="field"><label>预计需要多久（分钟）</label><input type="number" min="1" step="1" data-task-id="${escapeHtml(task.task_id)}" data-scope="plan" data-field="estimated_duration_minutes" value="${task.final_plan.estimated_duration_minutes}"></div>
+              </div>
+            </section>
+            ${coachingSection(task)}
+            ${reviewSection(task)}
+          </div>
+        </article>`;
+      }).join("");
+    }
+    function collectState() {
+      const next = structuredClone(state);
+      document.querySelectorAll("[data-task-id][data-scope]").forEach(control => {
+        if (control.type === "radio" && !control.checked) return;
+        const task = next.tasks.find(item => item.task_id === control.dataset.taskId);
+        if (!task) return;
+        const field = control.dataset.field;
+        if (control.dataset.scope === "coaching") {
+          task.coaching_result[field] = parseLines(control.value);
+        } else if (control.dataset.scope === "review") {
+          if (field === "actual_duration_minutes") {
+            task.review[field] = control.value ? Number(control.value) : null;
+          } else {
+            task.review[field] = control.value.trim();
+          }
+        } else if (field === "estimated_duration_minutes") {
+          task.final_plan[field] = Number(control.value);
+        } else {
+          task.final_plan[field] = control.value.trim();
+        }
+      });
+      next.daily_diary = dailyDiary.value.trim();
+      return next;
+    }
+    function validate(next, requireCompleteReview = false) {
+      for (const task of next.tasks) {
+        if (!task.final_plan.task) throw new Error("任务名称不能为空。");
+        if (!task.final_plan.planned_start) throw new Error(`“${task.final_plan.task}”还没有填写开始时间。`);
+        if (!Number.isInteger(task.final_plan.estimated_duration_minutes) || task.final_plan.estimated_duration_minutes < 1) throw new Error(`“${task.final_plan.task}”的预计时长需要是大于 0 的整数。`);
+        if (task.review.actual_duration_minutes !== null && (!Number.isInteger(task.review.actual_duration_minutes) || task.review.actual_duration_minutes < 0)) throw new Error(`“${task.final_plan.task}”的实际用时需要是 0 或更大的整数。`);
+        if (requireCompleteReview && !task.review.completion) throw new Error(`请先填写“${task.final_plan.task}”的完成情况。`);
+        if (requireCompleteReview && task.review.actual_duration_minutes === null) throw new Error(`请先填写“${task.final_plan.task}”的实际用时。`);
+        if (requireCompleteReview && !task.review.expectation) throw new Error(`请先填写“${task.final_plan.task}”与原先预期相比的情况。`);
+      }
+    }
+    let autoSaveTimer = null;
+    let saveInProgress = false;
+    let pendingManualSave = false;
+    let pendingAutoSave = false;
+    let editVersion = 0;
+    function savedStatus(saved) {
+      try { validate(saved, true); }
+      catch (_) { return "已暂存填写进度，复盘还未完成。"; }
+      return saved.review_saved_at
+        ? "今日复盘已保存。"
+        : "填写进度已暂存，可以点击“保存今日复盘”完成提交。";
+    }
+    function scheduleAutoSave() {
+      if (previewMode) return;
+      editVersion += 1;
+      clearTimeout(autoSaveTimer);
+      setStatus("修改尚未保存，正在暂存……");
+      autoSaveTimer = setTimeout(() => save(true), 900);
+    }
+    async function save(automatic = false) {
+      clearTimeout(autoSaveTimer);
+      if (saveInProgress) {
+        if (automatic) pendingAutoSave = true;
+        else {
+          pendingManualSave = true;
+          setStatus("正在保存之前的修改，随后检查并提交今日复盘……");
+        }
+        return;
+      }
+      const submittedVersion = editVersion;
+      try {
+        saveInProgress = true;
+        reloadButton.disabled = true;
+        const next = collectState();
+        validate(next, !automatic);
+        if (previewMode) {
+          state = next;
+          setStatus("预览修改暂时保留在当前页面中，关闭后不会保存。");
+          return;
+        }
+        if (!automatic) saveButton.disabled = true;
+        setStatus(automatic ? "正在暂存填写进度……" : "正在保存今日复盘……");
+        const response = await fetch(API_PATH, { method: "POST", headers: { "Content-Type": "application/json", "X-Daily-SRL-Save": automatic ? "draft" : "review" }, body: JSON.stringify(next) });
+        const payload = await response.json();
+        if (!response.ok) throw new Error("保存失败，请稍后重试。如果仍然无法保存，请回到对话中告诉我。");
+        state = payload.state;
+        if (submittedVersion !== editVersion) {
+          setStatus("之前的内容已保存，最新修改尚未保存，正在暂存……");
+        } else {
+          setStatus(savedStatus(state));
+        }
+      } catch (error) {
+        setStatus(chineseErrorMessage(error, "保存失败，请稍后重试。"), true);
+      } finally {
+        saveInProgress = false;
+        saveButton.disabled = false;
+        reloadButton.disabled = false;
+        if (pendingManualSave) {
+          pendingManualSave = false;
+          pendingAutoSave = false;
+          await save(false);
+        } else if (pendingAutoSave) {
+          pendingAutoSave = false;
+          await save(true);
+        }
+      }
+    }
+    async function reload() {
+      if (saveInProgress) return;
+      if (previewMode) {
+        state = structuredClone(sampleState);
+        render();
+        setStatus("已恢复模板预览内容。");
+        return;
+      }
+      try {
+        reloadButton.disabled = true;
+        setStatus("正在读取本地保存内容……");
+        const response = await fetch(API_PATH, { cache: "no-store" });
+        const payload = await response.json();
+        if (!response.ok) throw new Error("读取失败，请稍后重试。如果仍然无法读取，请回到对话中告诉我。");
+        state = payload;
+        render();
+        setStatus(`已读取保存的内容。${savedStatus(state)}`);
+      } catch (error) {
+        setStatus(chineseErrorMessage(error, "读取失败，请稍后重试。"), true);
+      } finally {
+        reloadButton.disabled = false;
+      }
+    }
+
+    if (previewMode) document.getElementById("preview-notice").hidden = false;
+    taskList.addEventListener("change", event => {
+      const control = event.target;
+      if (control.dataset.scope === "review" && control.dataset.field === "completion") {
+        const detail = document.querySelector(`[data-review-detail-for="${CSS.escape(control.dataset.taskId)}"]`);
+        if (detail) {
+          const showDetails = ["partial", "not_completed", "changed"].includes(control.value);
+          detail.hidden = !showDetails;
+          const textarea = detail.querySelector("textarea");
+          if (!showDetails && textarea) textarea.value = "";
+          if (showDetails) {
+            const copy = reviewDetailCopy(control.value);
+            const label = detail.querySelector("[data-review-detail-label]");
+            if (label) label.textContent = copy.label;
+            if (textarea) textarea.placeholder = copy.placeholder;
+          }
+        }
+      }
+      scheduleAutoSave();
+    });
+    taskList.addEventListener("input", scheduleAutoSave);
+    dailyDiary.addEventListener("input", scheduleAutoSave);
+    saveButton.addEventListener("click", () => save(false));
+    reloadButton.addEventListener("click", reload);
+    render();
+    if (previewMode) {
+      setStatus("当前是页面预览，修改不会保存。");
+    } else {
+      reload();
+    }
+  </script>
+</body>
+</html>

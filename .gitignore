@@ -1,0 +1,25 @@
+# macOS
+.DS_Store
+._*
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local environment and temporary files
+.env
+.env.*
+*.log
+*.tmp
+*.bak
+*.swp
+
+# Daily SRL runtime and learner data
+.daily-srl/
+Learning Records/
+
+# Distribution archives
+*.zip
