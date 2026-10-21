@@ -86,12 +86,23 @@
 
 ## 安装
 
-当前优先使用 ZIP 安装：
+### 命令行安装
 
-1. 从正式分发渠道下载 `Daily-SRL-Skill-v6.0.zip`；
-2. 在支持本地 Skill 的 Agent 中导入或安装完整压缩包；
-3. 选择一个用于保存当天学习资料的本地工作区；
-4. 使用上面的触发语开始当天流程。
+先安装 [Git](https://git-scm.com/downloads)。如果使用的 Agent 支持项目级 `.agents/skills/` 目录，在项目目录中打开终端，运行以下命令即可获取完整 Skill。Windows PowerShell 和 macOS 终端使用相同命令：
+
+```sh
+git clone --branch v6.0 --depth 1 https://github.com/tempetempe/temperance-daily-srl-skill.git .agents/skills/daily-srl-skill
+```
+
+此命令固定使用正式版 `v6.0`，将 `SKILL.md`、脚本、模板和参考资料一起放入 `.agents/skills/daily-srl-skill/`。如果 Agent 使用其他技能目录，请将命令最后的路径替换为该目录下的 `daily-srl-skill` 子目录。目标目录应尚不存在；已有旧版时，先按 Agent 的方式停用或移走旧版，再安装。
+
+完成后，按所用 Agent 的规则刷新技能或开启新会话，选择保存学习资料的本地工作区，再使用上面的触发语开始。技能文件与学习工作区可以分别存放。
+
+### 不使用命令行
+
+下载 [`v6.0` 源码 ZIP](https://github.com/tempetempe/temperance-daily-srl-skill/archive/refs/tags/v6.0.zip)，解压后，将包含 `SKILL.md` 的完整目录放入 Agent 的技能目录，并按该 Agent 的规则加载。保留 `scripts/`、`templates/`、`references/` 等配套文件，不要只复制 `SKILL.md`。
+
+以上为通用安装方法，具体支持的技能目录与加载方式以所用 Agent 的说明为准。仓库公开后可直接下载，无需 GitHub 账号；仓库仍为 Private 时，需要具有访问权限的 GitHub 账号。
 
 运行脚本使用 Python 标准库，不需要额外安装 Python 包。6.0 包含 Windows 与 Mac 的保存服务启动适配，以及平台原生文件锁。Mac 本机开发验证与 Windows 分支模拟分别记录；真实 WorkBuddy 的进程管理和浏览器恢复表现仍以实际使用为准。升级时保留完整学习工作区，避免同名旧版同时生效。
 
