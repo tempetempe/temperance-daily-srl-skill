@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-daily-srl-client="2">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -234,6 +234,8 @@
       margin-top: 20px;
     }
 
+    [hidden] { display: none !important; }
+
     .status {
       min-height: 48px;
       margin-top: 16px;
@@ -285,10 +287,18 @@
       <button class="button secondary" id="reloadAssessment" type="button">重新读取已保存内容</button>
     </div>
 
+    <div class="actions" aria-label="保存恢复">
+      <button class="button secondary" id="cancel-wait" type="button" hidden>取消等待</button>
+      <button class="button secondary" id="recover-save" type="button" hidden>检查保存状态</button>
+      <button class="button secondary" id="restore-draft" type="button" hidden>恢复草稿</button>
+      <button class="button secondary" id="export-draft" type="button" hidden>导出未保存草稿</button>
+    </div>
     <div id="status" class="status" role="status" aria-live="polite">正在读取已保存内容…</div>
   </main>
 
   <script id="initial-assessment-state" type="application/json">__ASSESSMENT_STATE_JSON__</script>
+  <script id="save-context" type="application/json">__SAVE_CONTEXT_JSON__</script>
+  <script src="save-client.js"></script>
   <script>
     (() => {
       "use strict";
@@ -300,12 +310,23 @@
       ];
       const API_PATH = "/api/assessment-state";
       const rawInitialState = document.getElementById("initial-assessment-state").textContent.trim();
-      const isTemplatePreview = !rawInitialState.startsWith("{");
-      const initialState = isTemplatePreview ? createTemplatePreviewState() : JSON.parse(rawInitialState);
+      const isTemplatePreview = location.protocol === "file:" || !rawInitialState.startsWith("{");
+      const initialState = rawInitialState.startsWith("{") ? JSON.parse(rawInitialState) : createTemplatePreviewState();
       const taskList = document.getElementById("taskList");
       const status = document.getElementById("status");
       const dateLabel = document.getElementById("assessmentDate");
       let state = normalizeState(initialState);
+      const rawContext = document.getElementById("save-context").textContent.trim();
+      const saveContext = rawContext.startsWith("{") ? JSON.parse(rawContext) : {};
+      const client = DailySRLSaveClient.create({
+        api: API_PATH, preview: isTemplatePreview, context: saveContext,
+        read: () => state,
+        apply: (value, redraw) => {
+          if (redraw) { state = normalizeState(value); render(); }
+          else state.saved_at = value.saved_at;
+        },
+        status: (message, error) => setStatus(message, error ? "error" : "")
+      });
 
       function createTemplatePreviewState() {
         const assessmentDate = new Date().toISOString().slice(0, 10);
@@ -404,6 +425,7 @@
           remove.setAttribute("aria-label", `删除任务 ${index + 1}`);
           remove.addEventListener("click", () => {
             state.tasks = state.tasks.filter((item) => item.task_id !== task.task_id);
+            client.edit();
             render();
             setStatus("已从当前页面删除任务；保存后会同步更新。", "");
           });
@@ -417,7 +439,7 @@
           const taskInput = createInput(`task-${task.task_id}`, task.task, {
             type: "text", required: true, placeholder: "例如：完成数学练习册第31至35页"
           });
-          taskInput.addEventListener("input", (event) => { task.task = event.target.value; });
+          taskInput.addEventListener("input", (event) => { task.task = event.target.value; client.edit(); });
           taskField.append(taskLabel, taskInput);
 
           const twoColumn = document.createElement("div");
@@ -431,7 +453,7 @@
           const startInput = createInput(`start-${task.task_id}`, task.planned_start, {
             type: "text", required: true, placeholder: "例如：19:00 或晚饭后"
           });
-          startInput.addEventListener("input", (event) => { task.planned_start = event.target.value; });
+          startInput.addEventListener("input", (event) => { task.planned_start = event.target.value; client.edit(); });
           startField.append(startLabel, startInput);
 
           const durationField = document.createElement("div");
@@ -448,6 +470,7 @@
             task.estimated_duration_minutes = event.target.value === ""
               ? null
               : Number(event.target.value);
+            client.edit();
           });
           durationField.append(durationLabel, durationInput);
           twoColumn.append(startField, durationField);
@@ -466,7 +489,7 @@
             radio.value = option.value;
             radio.checked = task.confidence === option.value;
             radio.required = true;
-            radio.addEventListener("change", () => { task.confidence = option.value; });
+            radio.addEventListener("change", () => { task.confidence = option.value; client.edit(); });
             const labelText = document.createElement("span");
             labelText.textContent = option.label;
             optionLabel.append(radio, labelText);
@@ -503,53 +526,30 @@
 
       async function loadFromDisk(announce = true) {
         if (isTemplatePreview) {
-          state = normalizeState(initialState);
-          render();
-          if (announce) {
-            setStatus("这里可以体验添加、删除和编辑，但修改不会保存。需要保存时，请从对话中打开今天的学习页面。", "");
-          }
+          setStatus("这里可以体验添加、删除和编辑，但修改不会保存。请从对话中打开今天的学习页面。");
           return;
         }
-        try {
-          const response = await fetch(API_PATH, { cache: "no-store" });
-          const payload = await response.json();
-          if (!response.ok) throw new Error("读取失败");
-          state = normalizeState(payload);
-          render();
-          if (announce) setStatus("已恢复上次保存的今日评估。", "ok");
-        } catch (error) {
-          state = normalizeState(initialState);
-          render();
-          setStatus("暂时无法读取已保存内容，已显示页面生成时的内容。请稍后重试；如果仍然无法读取，请回到对话中告诉我。", "error");
-        }
+        await client.load(announce);
       }
 
+      let saving = false;
       async function save() {
         if (isTemplatePreview) {
-          setStatus("这里是预览，修改不会保存。请从对话中打开今天的学习页面再保存。", "");
+          setStatus("这里是预览，修改不会保存。请从对话中打开今天的学习页面再保存。");
           return;
         }
+        if (saving) return;
         const validationMessage = validate();
-        if (validationMessage) {
-          setStatus(validationMessage, "error");
-          return;
-        }
-
-        setStatus("正在保存今日评估的完整内容…");
+        if (validationMessage) { setStatus(validationMessage, "error"); return; }
+        saving = true;
+        const button = document.getElementById("saveAssessment");
+        button.disabled = true;
         try {
-          const response = await fetch(API_PATH, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(state)
-          });
-          const payload = await response.json();
-          if (!response.ok) throw new Error("保存失败");
-          state = normalizeState(payload.state);
-          render();
-          setStatus("今日评估已保存。重新打开页面会恢复当前内容。", "ok");
-        } catch (error) {
-          setStatus("保存失败，请稍后重试。如果仍然无法保存，请回到对话中告诉我。", "error");
-        }
+          const result = await client.save(state);
+          if (result.ok) client.notify(result.current
+            ? "今日评估已保存。重新打开页面会恢复当前内容。"
+            : "之前的内容已保存；最新填写内容尚未保存，请再次点击保存。");
+        } finally { saving = false; button.disabled = false; }
       }
 
       document.getElementById("addTask").addEventListener("click", () => {
@@ -561,6 +561,7 @@
           confidence: ""
         };
         state.tasks.push(task);
+        client.edit();
         render();
         document.getElementById(`task-${task.task_id}`).focus();
         setStatus("已添加任务；填写后保存即可。", "");
@@ -570,7 +571,7 @@
       document.getElementById("reloadAssessment").addEventListener("click", () => loadFromDisk(true));
 
       render();
-      loadFromDisk(true);
+      loadFromDisk(false);
     })();
   </script>
 </body>

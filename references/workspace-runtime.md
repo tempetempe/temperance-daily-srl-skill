@@ -15,7 +15,7 @@ The installed Skill package is read-only reusable code and content. It must not 
 
 ## Readiness preflight
 
-Normal Skill Entry implicitly runs:
+Normal page entry uses `scripts/page_flow.py --workspace <root> assessment --date YYYY-MM-DD ...` or `daily-page [--coaching-file <file>]`. It performs this existing sequence internally:
 
 ```text
 Resolve authorized Workspace Root
@@ -24,7 +24,7 @@ Resolve authorized Workspace Root
 → continue the current Daily SRL stage
 ```
 
-There is no learner-facing initialization flow. If the host supplies no writable root, ask the learner only to select or authorize a folder for Daily SRL records.
+Do not prepend a separate `workspace_runtime.py ensure` or follow successful combined entry with another readiness call. The lower-level commands in this reference remain for explicit recovery, migration or diagnosis. There is no learner-facing initialization flow. If the host supplies no writable root, ask the learner only to select or authorize a folder for Daily SRL records.
 
 `scripts/workspace_runtime.py --workspace <root> ensure` is idempotent. On an empty Workspace it creates only:
 
@@ -97,7 +97,7 @@ Run recovery through `scripts/bridge_readiness.py ... ensure` or `workspace_runt
 
 ## Bridge readiness
 
-For an interactive page, run:
+The combined page entry invokes this existing readiness helper internally. Only use it directly for targeted recovery/diagnosis; a successful combined entry needs no second call:
 
 ```bash
 python3 <skill-package>/scripts/bridge_readiness.py \

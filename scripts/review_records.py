@@ -24,8 +24,11 @@ from persistence_bridge import validate_assessment_state, validate_daily_page_st
 import support_events as support  # noqa: E402
 from workspace_runtime import (  # noqa: E402
     WorkspaceRuntimeError,
+    _assert_authorized_workspace,
     ensure_directory,
     ensure_workspace,
+    read_workspace_marker,
+    workspace_paths,
 )
 
 
@@ -163,6 +166,111 @@ def load_review_states(workspace: Path) -> tuple[dict[str, Any], dict[str, Any]]
         if not review["expectation"]:
             raise ValueError(f"Review expectation is missing for {label}")
     return assessment, daily
+
+
+def inspect_review(workspace: Path) -> dict[str, Any]:
+    """Read validated learning facts without initializing or changing the workspace.
+
+    Readiness is a view of these source snapshots, never authorization to bypass
+    the current lock-protected checks in checkpoint/finalize. Learner text is
+    selected directly from the validated raw inputs, without summarizing or
+    replacing it with the validators' whitespace-normalized values.
+    """
+    result: dict[str, Any] = {
+        "schema_version": 1,
+        "status": "missing",
+        "ready": False,
+        "checks": {},
+        "missing": [],
+        "errors": [],
+        "facts": None,
+    }
+    try:
+        paths = workspace_paths(_assert_authorized_workspace(workspace))
+        targets = {
+            "assessment": paths.runtime / "assessment-state.json",
+            "daily_page": paths.runtime / "daily-page-state.json",
+        }
+        for path in (paths.root, paths.runtime, paths.marker, *targets.values()):
+            if path.is_symlink():
+                raise WorkspaceRuntimeError(f"refusing symlink: {path}")
+        for directory in (paths.root, paths.runtime):
+            if directory.exists() and not directory.is_dir():
+                raise WorkspaceRuntimeError(f"Daily SRL path is not a directory: {directory}")
+        if paths.marker.exists():
+            read_workspace_marker(paths.workspace)
+        if paths.migration_pending.exists():
+            raise WorkspaceRuntimeError("incomplete migration preserved; use the formal migrate-layout helper")
+    except (OSError, ValueError, TypeError, KeyError, WorkspaceRuntimeError) as error:
+        result["status"] = "invalid"
+        result["errors"].append({"source": "workspace", "message": str(error)})
+        return result
+
+    raw, states = {}, {}
+    validators = {"assessment": validate_assessment_state, "daily_page": validate_daily_page_state}
+    for source, path in targets.items():
+        if not path.exists():
+            result["checks"][f"{source}_state"] = "missing"
+            result["missing"].append({"source": source, "field": "state"})
+            continue
+        try:
+            raw[source] = load_json(path)
+            states[source] = validators[source](raw[source], mark_saved=False)
+        except (OSError, ValueError, TypeError, KeyError) as error:
+            result["checks"][f"{source}_state"] = "invalid"
+            result["errors"].append({"source": source, "message": str(error)})
+        else:
+            result["checks"][f"{source}_state"] = "valid"
+    if result["errors"]:
+        result["status"] = "invalid"
+        return result
+    if len(states) != 2:
+        return result
+
+    assessment, daily = states["assessment"], states["daily_page"]
+    checks = result["checks"]
+    checks["dates_match"] = assessment["assessment_date"] == daily["page_date"]
+    checks["task_ids_and_order_match"] = (
+        [task["task_id"] for task in assessment["tasks"]]
+        == [task["task_id"] for task in daily["tasks"]]
+    )
+    for check, message in (("dates_match", "Assessment and Daily Page dates do not match"),
+                           ("task_ids_and_order_match", "Assessment and Daily Page task IDs or order do not match")):
+        if not checks[check]:
+            result["errors"].append({"source": "pair", "message": message})
+    if result["errors"]:
+        result["status"] = "invalid"
+        return result
+
+    for source, state in states.items():
+        checks[f"{source}_saved"] = state["saved_at"] is not None
+        if not checks[f"{source}_saved"]:
+            result["missing"].append({"source": source, "field": "saved_at"})
+    for task in daily["tasks"]:
+        for field in ("completion", "actual_duration_minutes", "expectation"):
+            value = task["review"][field]
+            if value is None or value == "":
+                result["missing"].append({"source": "daily_page", "task_id": task["task_id"],
+                                          "field": f"review.{field}"})
+    facts = []
+    for original, task, validated in zip(raw["assessment"]["tasks"], raw["daily_page"]["tasks"], daily["tasks"]):
+        review = task["review"]
+        facts.append({
+            "task_id": validated["task_id"],
+            "assessment": {key: original.get(key) for key in (
+                "task", "planned_start", "estimated_duration_minutes", "confidence")},
+            "coaching_result": task.get("coaching_result"),
+            "final_plan": task["final_plan"],
+            "actual_performance": {key: review.get(key) for key in (
+                "completion", "completion_details", "actual_duration_minutes")},
+            "review": {"expectation": review["expectation"]},
+            "task_note": review["task_note"],
+        })
+    result["facts"] = {"record_date": daily["page_date"], "tasks": facts,
+                       "daily_diary": raw["daily_page"]["daily_diary"]}
+    result["ready"] = not result["missing"]
+    result["status"] = "ready" if result["ready"] else "incomplete"
+    return result
 
 
 def build_checkpoint(
@@ -488,15 +596,19 @@ def legacy_render_matches(record, learning, events):
                for n in range(len(fragments) + 1))
 
 
-def finalize_records(workspace: Path, discussion_file: Path, support_file: Path | None = None) -> tuple[Path, Path]:
+def finalize_records(workspace: Path, discussion_file: Path | None = None, support_file: Path | None = None,
+                     *, no_additions: bool = False) -> tuple[Path, Path]:
+    if (discussion_file is None) == (not no_additions):
+        raise ValueError("choose exactly one discussion_file or no_additions")
     _, daily_path, _, _ = state_paths(workspace)
     daily = validate_daily_page_state(load_json(daily_path), mark_saved=False)
     with support.day_lock(workspace, daily["page_date"]):
-        return _finalize_records(workspace, discussion_file, support_file)
+        return _finalize_records(workspace, discussion_file, support_file, no_additions=no_additions)
 
 
-def _finalize_records(workspace: Path, discussion_file: Path, support_file: Path | None = None) -> tuple[Path, Path]:
-    discussion_raw = load_json(discussion_file)
+def _finalize_records(workspace: Path, discussion_file: Path | None, support_file: Path | None = None,
+                      *, no_additions: bool = False) -> tuple[Path, Path]:
+    discussion_raw = {"topics": [], "additional_notes": []} if no_additions else load_json(discussion_file)
     _, daily_path, structured_dir, learning_dir = state_paths(workspace)
     daily = validate_daily_page_state(load_json(daily_path), mark_saved=False)
     date_value = daily["page_date"]
@@ -546,7 +658,7 @@ def _finalize_records(workspace: Path, discussion_file: Path, support_file: Path
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--workspace", type=Path, required=True)
+    parser.add_argument("--workspace", type=Path)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     checkpoint = subparsers.add_parser("checkpoint", help="save both records through Review")
@@ -556,18 +668,31 @@ def build_parser() -> argparse.ArgumentParser:
     decision.add_argument("--no-discussion", action="store_true")
 
     finalize = subparsers.add_parser("finalize", help="append confirmed Further Discussion")
-    finalize.add_argument("--discussion-file", type=Path, required=True)
+    discussion = finalize.add_mutually_exclusive_group(required=True)
+    discussion.add_argument("--discussion-file", type=Path)
+    discussion.add_argument("--no-additions", action="store_true", help="close with no new discussion content")
     finalize.add_argument("--support-file", type=Path, help="optional consolidated support batch in the same transaction")
+    inspect = subparsers.add_parser("inspect", help="read validated facts/readiness without writing files")
+    # Keep existing global argument order and allow the readable inspect form.
+    inspect.add_argument("--workspace", type=Path, default=argparse.SUPPRESS)
     return parser
 
 
 def main() -> int:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.workspace is None:
+        parser.error("--workspace is required")
     try:
-        if args.command == "checkpoint":
+        if args.command == "inspect":
+            result = inspect_review(args.workspace)
+            print(json.dumps(result, ensure_ascii=False, indent=2))
+            return 1 if result["status"] == "invalid" else 0
+        elif args.command == "checkpoint":
             paths = checkpoint_records(args.workspace, needs_discussion=args.needs_discussion, support_file=args.support_file)
         else:
-            paths = finalize_records(args.workspace, args.discussion_file, args.support_file)
+            paths = finalize_records(args.workspace, args.discussion_file, args.support_file,
+                                     no_additions=args.no_additions)
     except (
         FileNotFoundError,
         FileExistsError,
@@ -579,6 +704,14 @@ def main() -> int:
         raise SystemExit(f"error: {error}") from error
     print(f"Updated {paths[0]}")
     print(f"Updated {paths[1]}")
+    # Local saving already succeeded. Sync guidance must never roll it back or
+    # turn a successful save into a failed save when host tooling is unavailable.
+    try:
+        from team_space_sync import post_save_handoff
+        record_date = json.loads(paths[0].read_text(encoding="utf-8"))["record_date"]
+        print("Team sync handoff: " + json.dumps(post_save_handoff(args.workspace, record_date), ensure_ascii=False))
+    except (OSError, ValueError, KeyError, TypeError, ImportError) as error:
+        print(f"Local records saved; sync handoff unavailable: {error}", file=sys.stderr)
     return 0
 
 

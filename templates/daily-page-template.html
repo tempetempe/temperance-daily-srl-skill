@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-daily-srl-client="2">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -125,6 +125,10 @@
     <footer class="actions">
       <div id="status" class="status" role="status">正在准备页面……</div>
       <div class="button-group">
+        <button id="cancel-wait" class="button" type="button" hidden>取消等待</button>
+        <button id="recover-save" class="button" type="button" hidden>检查保存状态</button>
+        <button id="restore-draft" class="button" type="button" hidden>恢复草稿</button>
+        <button id="export-draft" class="button" type="button" hidden>导出未保存草稿</button>
         <button id="reload-button" class="button" type="button">重新读取已保存内容</button>
         <button id="save-button" class="button primary" type="button">保存今日复盘</button>
       </div>
@@ -132,6 +136,8 @@
   </main>
 
   <script id="initial-state" type="application/json">__DAILY_PAGE_STATE_JSON__</script>
+  <script id="save-context" type="application/json">__SAVE_CONTEXT_JSON__</script>
+  <script src="save-client.js"></script>
   <script>
     const API_PATH = "/api/daily-page-state";
     const PREVIEW_TOKEN = "__" + "DAILY_PAGE_STATE_JSON" + "__";
@@ -170,6 +176,13 @@
     const saveButton = document.getElementById("save-button");
     const reloadButton = document.getElementById("reload-button");
     const dailyDiary = document.getElementById("daily-diary");
+
+    const rawContext = document.getElementById("save-context").textContent.trim();
+    const saveContext = rawContext.startsWith("{") ? JSON.parse(rawContext) : {};
+    const client = DailySRLSaveClient.create({
+      api: API_PATH, preview: previewMode, context: saveContext, read: collectState,
+      apply: (value, redraw) => { state = value; if (redraw) render(); }, status: setStatus
+    });
 
     function escapeHtml(value) {
       return String(value).replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[char]);
@@ -324,9 +337,10 @@
     function scheduleAutoSave() {
       if (previewMode) return;
       editVersion += 1;
+      client.edit();
       clearTimeout(autoSaveTimer);
-      setStatus("修改尚未保存，正在暂存……");
-      autoSaveTimer = setTimeout(() => save(true), 900);
+      client.notify(client.isSuspended() ? "最新填写内容保留为本机草稿；请先检查保存状态。" : "修改尚未保存，正在暂存……");
+      if (!client.isSuspended()) autoSaveTimer = setTimeout(() => save(true), 900);
     }
     async function save(automatic = false) {
       clearTimeout(autoSaveTimer);
@@ -351,14 +365,17 @@
         }
         if (!automatic) saveButton.disabled = true;
         setStatus(automatic ? "正在暂存填写进度……" : "正在保存今日复盘……");
-        const response = await fetch(API_PATH, { method: "POST", headers: { "Content-Type": "application/json", "X-Daily-SRL-Save": automatic ? "draft" : "review" }, body: JSON.stringify(next) });
-        const payload = await response.json();
-        if (!response.ok) throw new Error("保存失败，请稍后重试。如果仍然无法保存，请回到对话中告诉我。");
-        state = payload.state;
-        if (submittedVersion !== editVersion) {
-          setStatus("之前的内容已保存，最新修改尚未保存，正在暂存……");
+        const result = await client.save(next, automatic ? "draft" : "review");
+        if (!result.ok) {
+          clearTimeout(autoSaveTimer);
+          pendingAutoSave = false;
+          pendingManualSave = false;
+          return;
+        }
+        if (!result.current || submittedVersion !== editVersion) {
+          client.notify("之前的内容已保存，最新修改尚未保存，正在暂存……");
         } else {
-          setStatus(savedStatus(state));
+          client.notify(savedStatus(result.state));
         }
       } catch (error) {
         setStatus(chineseErrorMessage(error, "保存失败，请稍后重试。"), true);
@@ -376,27 +393,16 @@
         }
       }
     }
-    async function reload() {
+    async function reload(discard = true) {
       if (saveInProgress) return;
+      clearTimeout(autoSaveTimer);
       if (previewMode) {
-        state = structuredClone(sampleState);
-        render();
-        setStatus("已恢复模板预览内容。");
-        return;
+        state = structuredClone(sampleState); render(); setStatus("已恢复模板预览内容。"); return;
       }
-      try {
-        reloadButton.disabled = true;
-        setStatus("正在读取本地保存内容……");
-        const response = await fetch(API_PATH, { cache: "no-store" });
-        const payload = await response.json();
-        if (!response.ok) throw new Error("读取失败，请稍后重试。如果仍然无法读取，请回到对话中告诉我。");
-        state = payload;
-        render();
-        setStatus(`已读取保存的内容。${savedStatus(state)}`);
-      } catch (error) {
-        setStatus(chineseErrorMessage(error, "读取失败，请稍后重试。"), true);
-      } finally {
-        reloadButton.disabled = false;
+      const result = await client.load(discard);
+      if (result.pendingEdits && !client.isSuspended()) {
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => save(true), 900);
       }
     }
 
@@ -423,12 +429,12 @@
     taskList.addEventListener("input", scheduleAutoSave);
     dailyDiary.addEventListener("input", scheduleAutoSave);
     saveButton.addEventListener("click", () => save(false));
-    reloadButton.addEventListener("click", reload);
+    reloadButton.addEventListener("click", () => reload(true));
     render();
     if (previewMode) {
       setStatus("当前是页面预览，修改不会保存。");
     } else {
-      reload();
+      reload(false);
     }
   </script>
 </body>

@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
+from platform_lock import nonblocking_file_lock
+
 
 sys.dont_write_bytecode = True
 
@@ -632,7 +634,16 @@ def read_manifest(workspace: Path, *, allow_missing: bool = True) -> dict[str, A
     return value
 
 
-def render_html(kind: str, state: dict[str, Any]) -> str:
+def page_context(kind: str, state: dict[str, Any], workspace_id: str) -> dict[str, str]:
+    """Stable per-generation identity; operational metadata never enters State."""
+    flow_date = str(state.get(PAIR_SPECS[kind]["date_field"], ""))
+    identity = json.dumps([workspace_id, kind, flow_date, state.get("generated_at")],
+                          ensure_ascii=False, separators=(",", ":"))
+    return {"workspace_id": workspace_id, "kind": kind, "date": flow_date,
+            "runtime_id": hashlib.sha256(identity.encode("utf-8")).hexdigest()}
+
+
+def render_html(kind: str, state: dict[str, Any], *, workspace_id: str = "") -> str:
     if kind not in PAIR_SPECS:
         raise ValueError(f"unsupported runtime pair: {kind}")
     spec = PAIR_SPECS[kind]
@@ -642,7 +653,8 @@ def render_html(kind: str, state: dict[str, Any]) -> str:
     if template.count(token) != 1:
         raise WorkspaceRuntimeError(f"template must contain exactly one {token}: {template_path}")
     state_json = json.dumps(state, ensure_ascii=False, indent=2).replace("</", "<\\/")
-    return template.replace(token, state_json)
+    context_json = json.dumps(page_context(kind, state, workspace_id), ensure_ascii=False).replace("</", "<\\/")
+    return template.replace(token, state_json).replace("__SAVE_CONTEXT_JSON__", context_json)
 
 
 def _manifest_entry(kind: str, state: dict[str, Any], *, user_saved: bool) -> dict[str, Any]:
@@ -660,6 +672,18 @@ def _manifest_entry(kind: str, state: dict[str, Any], *, user_saved: bool) -> di
 
 
 def write_runtime_pair(
+    workspace: Path,
+    kind: str,
+    state: dict[str, Any],
+    *,
+    clear_pairs: Iterable[str] = (),
+) -> tuple[Path, Path]:
+    paths = ensure_workspace(workspace)
+    with nonblocking_file_lock(paths.root / "page-save.lock", busy_message="当前页面正在保存，请保留输入后重试。"):
+        return _write_runtime_pair(workspace, kind, state, clear_pairs=clear_pairs)
+
+
+def _write_runtime_pair(
     workspace: Path,
     kind: str,
     state: dict[str, Any],
@@ -685,7 +709,7 @@ def write_runtime_pair(
     replace_bundle(
         {
             state_path: state_text,
-            html_path: render_html(kind, state),
+            html_path: render_html(kind, state, workspace_id=read_workspace_marker(paths.workspace)["workspace_id"]),
             paths.manifest: json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
         },
         remove=removals,
@@ -694,6 +718,21 @@ def write_runtime_pair(
         raise WorkspaceRuntimeError(f"{kind} runtime pair was not created completely")
     return html_path, state_path
 
+
+
+def refresh_page_client(workspace: Path, kind: str, state: dict[str, Any]) -> bool:
+    """Upgrade only a previous client's HTML; never rewrite State or its manifest.
+
+    Open browser-only edits must be protected before upgrading/reopening a page.
+    A fresh client always performs GET before accepting a formal save.
+    """
+    _, html_path = pair_paths(workspace, kind)
+    current = html_path.read_text(encoding="utf-8")
+    if 'data-daily-srl-client="2"' in current:
+        return False
+    marker = read_workspace_marker(workspace)
+    atomic_write_text(html_path, render_html(kind, state, workspace_id=marker["workspace_id"]))
+    return True
 
 def mark_runtime_user_saved(workspace: Path, kind: str) -> None:
     paths = workspace_paths(workspace)
@@ -764,7 +803,7 @@ def recover_pair(
         manifest["updated_at"] = utc_now()
         replace_bundle(
             {
-                html_path: render_html(kind, state),
+                html_path: render_html(kind, state, workspace_id=read_workspace_marker(paths.workspace)["workspace_id"]),
                 paths.manifest: json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
             }
         )

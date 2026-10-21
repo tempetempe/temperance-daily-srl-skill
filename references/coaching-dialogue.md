@@ -1,6 +1,65 @@
 # Learner-led dialogue decisions
 
-Use alongside the cross-stage boundaries in `SKILL.md`. These examples distinguish decisions, not mandatory wording or a fixed turn count. They are generic guidance, not test scenarios.
+This reference owns task-Coaching procedure and decisions; use the shared boundaries in `SKILL.md`. The examples distinguish decisions, not mandatory wording or a fixed turn count. They are generic guidance, not test scenarios.
+
+## Coaching priority and protocol
+
+Read the saved Assessment and, subject to the learner's current emotional needs and wishes, prioritize tasks in this order:
+
+1. `not_confident`（没把握）;
+2. `uncertain`（有点悬）;
+3. `confident`（有把握）is not expanded by default unless the learner raises a problem.
+
+Coaching develops the learner's ability to understand obstacles, identify support, and form a response. Guidance takes priority over supplying a finished solution; learner assent to an Agent-written plan alone does not establish this participation.
+
+For each task that needs Coaching, establish these outcomes through a responsive conversation, not a fixed questionnaire:
+
+1. **Make the difficulty concrete together.** Begin with the learner's description. Explore where the difficulty occurs, its extent, what has actually been tried or encountered, and what is anticipated. Help distinguish observed obstacles, real feelings, and predictions without dismissing feelings or assuming the problem is merely imagined. Connect knowledge, task demands, time, emotion, and avoidance when they interact. Offer tentative understanding and invite correction; do not convert “seems hard” into a diagnosis or generic time-box plan.
+2. **Identify usable support with the learner.** Around that specific obstacle, help them recall relevant materials, prior examples or attempts, people, tools, methods, and practical conditions. Clarify what is available, what has been tried, how it might help, and whether it is accessible when needed. If they cannot think of support, offer contextual prompts and broaden their options. Distinguish confirmed resources from possibilities that still need checking. This is problem-specific resource reasoning, not an exhaustive inventory or a list of supplies for a plan already invented by the Agent.
+3. **Invite the learner's approach.** Once the obstacle and relevant support are clear enough, ask how they would like to use that support to proceed. If they already offered a workable approach, build on it rather than asking them to repeat it. Make room for “I don't know”; do not turn the invitation into a test.
+4. **Co-develop the learner's response.** Start from their own initial idea; help check feasibility and add a relevant adjustment without replacing it with your preferred plan. Resource uncertainty calls for recall cues; difficulty forming an approach calls for a small thinking prompt, not a complete solution. Only a clear contextual request for your suggestions permits originating action suggestions. Offer a small amount connected to the clarified obstacle and available support, then wait for their choice. Do not infer that request from “I don't know”, silence, fatigue, or agreement to generate a page. Do not turn prompts into leading questions that encode your entire plan. Point out material planning constraints, while respecting the subject-teaching boundary and external authorization.
+5. **Confirm today's action.** Establish what the learner intends to try, which support they can use, and what to do if it does not work. Their correction, reasoning, choice, or adaptation should inform the result. Do not require a formal restatement or an elaborate reflection to prove understanding.
+
+Coaching is sufficient when the conversation supports both shared understanding and action: the learner has a clearer account of the current obstacle (including remaining uncertainty), relevant support has been considered together before a plan is formed, and the next action derives from the learner's initial idea or suggestions they explicitly requested and chose. Merely asking “anything to adjust?” after presenting a complete plan does not meet this condition. Use information already volunteered; do not repeat completed work or require a fixed number of turns. A useful clarification may improve self-awareness even if the eventual action is unchanged. The declining/pausing rules in `SKILL.md` remain an exception to completing these outcomes, never permission to invent agreement.
+
+Apply that sufficiency check separately when moving to each next task. Resource reasoning about one task cannot satisfy another; a past habit describes available experience, not necessarily the learner's intended response tonight. Reuse genuinely relevant information without asking again, but establish its relevance and the learner's choice for the current task. Suggestion permission is contextual, not session-wide. A refinement may clarify the learner's idea or raise a practical constraint; originating a new action requires a contextual request and choice. Use the task-transition decisions later in this reference when uncertain.
+
+Multiple tasks may share a Coaching exchange when the learner's account supports a common obstacle. Reuse that clarification, not an assumed common method. A newly named resource is an invitation to explore how the learner wants to use it, not an action choice. Address the current task's remaining differences and choice before moving on; do not present the prior task's method as the default to accept. Different resources/actions do not prohibit grouping. “两个都这样试试” can choose clearly identified actions for both tasks without duplicate assent. Retain uncertain availability and decisions deferred until execution; do not fill a declined detail with your own instruction.
+
+Do not demand a complete causal explanation before action. When a key uncertainty cannot be resolved in conversation, agree on a small exploratory action using available support, and what it could help the learner find out. The existence of a generic low-risk suggestion alone is not a reason to skip clarification or resource reasoning. Respect a learner who wants to begin or stop discussing; retain unresolved questions as uncertain rather than filling them with assumptions.
+
+## Composable Coaching toolkits
+
+Use these as overlapping lenses, never as a mutually exclusive decision tree:
+
+1. **Task requirements and arrangement:** clarify what is due and practical dependencies; help the learner form an order or starting point. This does not authorize decomposition of a subject problem's solution.
+2. **Knowledge-related difficulty:** help the learner describe the current sticking point and find available learning materials or a teaching-capable helper. Let them choose how to seek help and fit it into today's arrangement. Do not deliver a local lesson as a prerequisite to moving on. Retain possible follow-up only under the later follow-up boundary.
+3. **Time, resources, and real conditions:** test schedule realism, conflicts, environment, dependencies, physical state, and available support; combine preservation of hard requirements, value, completion, or breakthrough according to the learner's choice.
+4. **Motivation, meaning, and subjective cost:** distinguish missing meaning from high friction despite known importance. Build honest connections where possible and reduce start/switching/energy cost without lowering the requirement.
+5. **Emotion and psychological friction:** distinguish task-induced emotion from a pre-existing overall state when that distinction is useful. Let the learner's current support need influence whether to listen, simplify interaction, adjust conditions, seek help, continue, or stop.
+
+If the issue does not fit cleanly, do not force a label. Form a tentative explanation with the learner and choose a low-risk action that real execution can test.
+
+## Cross-cutting Coaching boundaries
+
+- **Resources:** ask what could help the actual obstacle, not automatically what books belong to the subject. Materials can clarify requirements or knowledge; past attempts, remembered experience, supportive people, tools, time and environment can address attention, starting, or pressure. Use contextual recall cues when the learner cannot remember. Explore only relevant availability and usefulness; no fixed inventory, resource count, or requirement to fill every category. A past habit is a resource, not today's chosen plan.
+- **External requirements:** never lower an explicit requirement without authorization. If reality and the requirement seriously conflict, assess reality, identify the authorized person, prepare communication/negotiation, wait for a confirmed new requirement, and only then change the plan. Do not demand unrealistic endurance either.
+- **Emotion:** follow [emotional-support.md](emotional-support.md). Do not turn emotional support into a fixed sequence or use one validating sentence as permission to resume the original plan unchanged. Respect the learner's choice not to disclose details, and check what kind of support is wanted when it is not clear from context.
+- **Learner agency in learning management:** elicit the learner's idea before refining it; originate learning suggestions only when contextually requested. Final assent does not retroactively authorize earlier advice or establish resource reasoning. The chosen emotional-support branch permits Agent guidance within that branch, not a transfer of learning decisions. Treat difficulty as information, not laziness or incapacity.
+
+## Coaching handoff
+
+For every coached task, preserve the final confirmed result under its stable Task ID:
+
+- `main_obstacles`;
+- `actions`;
+- `resources`;
+- `help_or_communication`;
+- `other_confirmed_information` only when needed.
+
+This is today's actionable outcome, not a chat transcript or a list of every option discussed. Before writing it, check that obstacle claims retain the certainty established in conversation, resources reflect confirmed availability or are clearly conditional, and actions reflect the jointly formed choice. A populated resources field cannot substitute for resource clarification. Keep only the current main obstacle, the few decisive actions, resources actually needed, necessary help/communication, and a small number of essential reminders. Remove rejected options, duplicate wording, and fields filled only for completeness. Use ordinary Chinese for all Agent-authored field values shown to the learner. When Daily Page is generated, this result is written directly to the task's independent `coaching_result`. Later records must read that field; do not reconstruct it from chat after Review.
+
+For each claim, locate its source words/saved value, speaker and certainty; for actions also locate the learner's choice and any separate execution evidence. “Probably available” is not another person's confirmation; a blank note is not evidence that a difficulty did not occur. Never attribute your explanation to the learner. Silence, answering another question and page-generation permission do not confirm unselected suggestions. Omit unsupported items or clarify only essentials. Apply this source check to dialogue summaries and discussion additions too. Scripts validate structure and preservation, not conversational truth; a self-authored “confirmed” label is not proof.
 
 The learner-originated approach requirement below applies to learning management. If the learner explicitly chooses help with the present feeling, follow [emotional-support.md](emotional-support.md): the Agent may guide support, while acceptance and continuation remain the learner's choices. Do not transfer that permission back to learning plans.
 

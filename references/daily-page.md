@@ -2,11 +2,11 @@
 
 ## Input boundary
 
-Generate Daily Page only after clear semantic progression intent and after required Coaching meets the shared-understanding and action conditions in `SKILL.md`: the current obstacle is clearer, relevant resources have been considered with the learner, and the learner has shaped a feasible approach with appropriate support. If emotion or overload affected the conversation, also confirm that the proposed load, timing, method, and interaction demand still fit what the learner chose; the emotion does not need to be resolved before planning. The generator reads the learner-saved Assessment and a Coaching handoff keyed by stable Task ID. It validates data structure, not whether those conversational conditions occurred; the Agent must verify them before calling it. Use ordinary Chinese for learner-visible handoff values and page explanations.
+Generate Daily Page only after clear semantic progression intent and after required Coaching meets the shared-understanding and action conditions in [coaching-dialogue.md](coaching-dialogue.md): the current obstacle is clearer, relevant resources have been considered with the learner, and the learner has shaped a feasible approach with appropriate support. If emotion or overload affected the conversation, also confirm that the proposed load, timing, method, and interaction demand still fit what the learner chose; the emotion does not need to be resolved before planning. The generator reads the learner-saved Assessment and, only when needed, a Coaching/plan handoff keyed by stable Task ID. It validates data structure, not whether those conversational conditions occurred; the Agent must verify them before calling it. Use ordinary Chinese for learner-visible handoff values and page explanations.
 
 Check these conditions separately for every task requiring Coaching. A confident task with no new concern needs no expanded Coaching; one completed task does not stand in for the remaining tasks. Before generation, compare the whole saved task list with the conversation, then proactively obtain any still-needed arrangement/progression confirmation. Do not wait for the learner to name the missing stage.
 
-An explicit topic refusal or pause invokes “Declining, pausing, and closing” in `SKILL.md`. Preserve uncertainty, use confirmed facts for an accepted feasible arrangement, and do not invent clarification or require disclosure. “不知道”, distress, and not disclosing a private event do not themselves waive other Coaching. A pause suspends delivery; a learner continuing toward execution still receives the complete accepted Daily Page. The Agent must not defer remaining Coaching until after the first task merely because the learner is distressed.
+An explicit topic refusal or pause invokes “Emotional needs, refusal and pause” in `SKILL.md`. Preserve uncertainty, use confirmed facts for an accepted feasible arrangement, and do not invent clarification or require disclosure. “不知道”, distress, and not disclosing a private event do not themselves waive other Coaching. A pause suspends delivery; a learner continuing toward execution still receives the complete accepted Daily Page. The Agent must not defer remaining Coaching until after the first task merely because the learner is distressed.
 
 Before writing, locate the source statement for every claim and the learner's choice for every action. For learning arrangements, the learner must originate the initial approach unless they contextually requested suggestions; acceptance of an unsolicited complete plan does not repair that earlier violation. In the separately chosen emotional-support branch the Agent may guide support, but that does not authorize homework methods. Include only a genuinely chosen support-related arrangement needed for task execution in Coaching Result; save the actual support process through [support-records.md](support-records.md), not as a compulsory task or private story in the page. Unknown resources and execution-time choices remain conditional. A request to generate the page does not select all previously mentioned advice. These are semantic checks; adding a boolean “confirmed” cannot prove them.
 
@@ -36,15 +36,28 @@ Include supported Coaching understanding and chosen actions even when the final 
 
 ## Generate Runtime
 
+Create a handoff only when a task has a confirmed Coaching Result or a confirmed final-plan override. With neither, omit the file and let the program use the saved Assessment as the initial plan. Confidence alone does not decide this: a confident task with a chosen time/order/text adjustment still needs its override. Never invent empty results or an unnecessary file solely for a handoff step.
+
+With actual confirmed content, explicitly pass the file:
+
 ```bash
-python3 <skill-package>/scripts/generate_daily_page.py \
-  --workspace <workspace-root> \
+python3 <skill-package>/scripts/page_flow.py \
+  --workspace <workspace-root> daily-page \
   --coaching-file /path/to/coaching-handoff.json
 ```
 
-Useful options:
+With no result and no override:
 
-- `--force`: replace an existing Daily Page for the same date intentionally.
+```bash
+python3 <skill-package>/scripts/page_flow.py \
+  --workspace <workspace-root> daily-page
+```
+
+The combined entry performs workspace readiness, generation/recovery and Bridge checks. Do not separately rerun ensure, generator or readiness on its normal successful path. It returns `status=ready`, `operation=generated|resumed`, `flow_date`, validated task/path information, `page_url`, and `page_opened=false`. The host still opens the page. Existing same-day content is resumed, never silently rebuilt; newly supplied handoff data is not reapplied on resume and the result says so. If a confirmed change must be applied to an existing learner page, preserve current State and use its editable page under the learner's current intent rather than force-generation.
+
+Low-level `generate_daily_page.py` is retained for deliberate maintenance, not ordinary re-entry. Its options:
+
+- `--force`: replace an existing Daily Page for the same date intentionally; not an option of the normal combined entry.
 - `--refresh-html-only`: apply the current template to Runtime HTML while preserving the existing authoritative `daily-page-state.json`; use this for UI/template updates after a page may already contain learner edits.
 
 Bootstrap and Assessment do not create Daily Page files. Only the clear Generate Daily Page stage creates them. The generator preserves Assessment Task IDs, maps underlying confidence to visual state, writes `coaching_result` at generation time, initializes empty Review/Task Note/Daily Diary fields, and installs this Runtime Pair with rollback protection:
@@ -54,12 +67,7 @@ Bootstrap and Assessment do not create Daily Page files. Only the clear Generate
 
 ## Page and Bridge
 
-```bash
-python3 <skill-package>/scripts/bridge_readiness.py \
-  --workspace <workspace-root> ensure --page daily-page
-```
-
-Open the returned `page_url`. The readiness helper normally reuses the verified Bridge for the same Workspace; otherwise it starts and verifies one, including dynamic-port fallback. The learner never needs to manage it.
+Open the combined entry's returned `page_url`; a printed URL alone is not delivery. The helper reuses a healthy same-workspace Bridge or starts/verifies one, with dynamic-port fallback. If content is ready but the Bridge fails, `status=page_not_ready` / `local_content_ready=true` preserves it; retry the combined entry to recover/reopen without generation. Standalone `bridge_readiness.py ... ensure --page daily-page` remains for recovery/diagnosis, not an automatic repeat after success. The learner never manages the server.
 
 Before inviting execution, verify the generated State contains every saved Assessment task with the same IDs/date and faithfully represents selected actions. Verify the readiness result and that the host opened the correct Daily Page, not a template, Assessment, or old-day page. Existing helpers verify State and page access; they cannot certify dialogue quality or host display. A URL returned without a successful host open is not delivered. On failure, retain state and explain the remaining delivery problem plainly; do not say “开始吧” or ask the learner to manage the protocol.
 
@@ -89,3 +97,37 @@ Opening `templates/daily-page-template.html` directly enters a non-persistent pr
 - Page-level `daily_diary` stores the optional “今日小记”.
 - Review Completed routing, Checkpoint, Further Discussion, and Record generation are documented in [review-records.md](review-records.md).
 - Auto-saved or explicitly saved `daily-page-state.json` is the authoritative Final Plan and current page state.
+
+
+## Learner-facing layout and Review fields
+
+Each task card keeps the editable Plan and complete Review inputs together. The learner-facing “今天的安排” section always stays lightweight and consistent across visual states: show only task, planned start, and estimated duration. Do not render steps, resources, help, reminders, requirement information, a dashed divider, or a separate “执行补充” area beneath it; those would repeat the Coaching content.
+
+For coached tasks, render the independent Coaching Result under the learner-facing title “关于这项任务”. Use natural field labels such as “目前最卡的地方”, “我们商量好的应对方式”, “手上能用的资源”, and “需要找谁帮忙，或要沟通什么”. Put the page-level optional Daily Diary below all task cards.
+
+Daily Page shows soft green for ordinary tasks, a clean yellow `留意一下` card for Assessment `uncertain`, and a soft coral `重点关注` card for `not_confident`; do not mix the green accent into yellow cards, and never show the Assessment labels “有点悬” or “没把握” in the page UI.
+
+## Review in Daily Page
+
+Every task has exactly these fixed Review inputs:
+
+- Completion: 已完成 / 部分完成 / 未完成 / 实际安排发生变化;
+- Actual Duration;
+- “和原先的预期相比，这项任务怎么样？” with 比预想更好 / 和预想差不多 / 没有达到预期;
+- one optional unlimited Task Note titled “关于这个任务，还有什么想记下来的吗？”.
+
+Do not add “感觉怎么样？”. Completion details are conditional: “部分完成” asks which part was not completed; “未完成” asks what happened; “实际安排发生变化” asks what changed; “已完成” hides and clears the supplemental field. Task Note uses one free-text box; its multi-line prompt is placeholder guidance, not separate questions or required answers.
+
+Put the optional unlimited “今日小记” after all task cards. It is one free-text field for any positive or negative experience, emotion, discovery, self-acknowledgement, lesson, confusion, unresolved issue, help/discussion request, message to the future self, or other expression. Never turn it into a questionnaire.
+
+Runtime auto-save may preserve an incomplete in-progress Review. The explicit “保存今日复盘” action and Review Checkpoint require Completion, Actual Duration, and Expectation for every task; Task Note and Daily Diary remain optional.
+
+Distinguish draft preservation from formal Review completion. Incomplete auto-saved content is “已暂存填写进度，复盘还未完成”; complete draft content still needs submission or clear conversational Review Completed intent. `saved_at` is only a write time, not completion evidence. The page's optional `review_saved_at` marks a validated explicit page submission of the current content; subsequent content changes invalidate it. Always read and check required values even when a marker or a learner's “保存好了” exists. Never fabricate fields or block the learner from leaving because a draft is incomplete.
+
+
+
+## RC7 shared recovery and submission boundary
+
+Daily Page uses the same [save client and recovery contract](assessment-persistence.md#rc7-shared-save-recovery-assessment-and-daily-page) as Assessment. Keep its existing 900 ms coalesced autosave and manual-submission priority. Autosave posts `X-Daily-SRL-Save: draft`; only the explicit validated Review submission uses `review`. Browser draft restoration alone must never set `review_saved_at`, post an automatic Review, or route to record creation.
+
+Preserve edits made during a delayed initial read or save response. A pending/cancelled/error request keeps its snapshot and current draft; clear queued automatic/manual attempts when the result is uncertain, then reconcile before another submission. An exception may trigger one scoped read, not an automatic save loop. Normal successful saves use their POST result directly. A complete draft still requires the learner's actual submission or existing conversational Review Completed intent.

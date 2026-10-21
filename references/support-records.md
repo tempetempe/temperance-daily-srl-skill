@@ -19,11 +19,11 @@ python3 <skill>/scripts/support_events.py --workspace <root> --date YYYY-MM-DD s
 # 完整 Review 后直接收尾
 python3 <skill>/scripts/review_records.py --workspace <root> checkpoint --no-discussion --support-file <batch.json>
 
-# 已有 review_saved，进一步讨论收尾；空讨论也可以
+# 已有 review_saved，进一步讨论收尾；有实际新增讨论内容
 python3 <skill>/scripts/review_records.py --workspace <root> finalize --discussion-file <discussion.json> --support-file <batch.json>
 ```
 
-没有新增支持则省略 `--support-file`。不要先 save-batch 再 finalize 同一批内容；finalizer 可以在一个事务中保存全部。成功命令内已检查实际输出及双记录一致性，不例行追加 verify/read 命令拖长收尾。恢复或诊断时才独立使用 show / verify：
+没有讨论新增内容时，使用 `finalize --no-additions --support-file <batch.json>`，不制作空讨论文件；不能用它省略已形成但未保存的讨论结果。没有新增支持则省略 `--support-file`。不要先 save-batch 再 finalize 同一批内容；finalizer 可以在一个事务中保存全部。成功命令内已检查实际输出及双记录一致性，不例行追加 verify/read 命令拖长收尾。恢复或诊断时才独立使用 show / verify：
 
 ```sh
 python3 <skill>/scripts/support_events.py --workspace <root> --date YYYY-MM-DD show
@@ -35,7 +35,7 @@ python3 <skill>/scripts/support_events.py --workspace <root> --date YYYY-MM-DD r
 
 ## 批次数据合同
 
-新输入严格包含 schema_version、events、summaries。事实按实际顺序输入，不按编造的时间排序。下面示例仅在相应交流实际发生时成立：
+新输入严格包含 schema_version、events、summaries。RC5 允许下述确定性默认值简写，落盘仍为原完整 schema，不削减事实字段。事实按实际顺序输入，不按编造的时间排序。下面示例仅在相应交流实际发生时成立：
 
 ```json
 {
@@ -72,6 +72,14 @@ python3 <skill>/scripts/support_events.py --workspace <root> --date YYYY-MM-DD r
 }
 ```
 
+### RC5 简写输入
+
+在上述 schema_version=2 批次中，可同时省略事件的 `occurred_at` / `time_source` / `time_evidence` 三项，程序补为 `null` / `unknown` / `""`。三项只省略一部分会拒绝；有真实活动时间时仍提供完整三项和来源依据。显式非法值不会被默认值修正。
+
+没有实际关联时，还可分别省略 `related_task_ids`、`strategy_ids`、`related_event_id`，分别补 `[]`、`[]`、`null`；首次摘要可省略 `supersedes`，补 `null`。有实际关联或修订关系时必须提供，不为少写字段而丢失事实。其它语义、原话、支持动作、反馈、learner_visible、摘要证据与 ID 字段仍按原合同提供。ID 由 Agent 明确稳定给出，重试复用，程序不自动生成新 ID。
+
+简写仅减少固定工程值。未反馈仍是未反馈，不能填成改善、拒绝或有效。程序规范化后继续执行原校验、事务、去重和完整存储；仍使用相同的 `save-batch` / `--support-file`，不增加学习者表格或额外命令。
+
 ### 事实字段与来源
 
 - event_id / episode_id：1–80 位字母、数字、下划线或连字符。同一段连续支持共用 episode_id；不按每条消息建一段支持。
@@ -88,7 +96,7 @@ python3 <skill>/scripts/support_events.py --workspace <root> --date YYYY-MM-DD r
 
 ### 时间
 
-新事件必须带 time_source 和 time_evidence。默认 unknown、空证据、occurred_at 为 null。已知事件时间仅接受 learner_report 或 activity_timer，并写出对应活动的时间依据；occurred_at 需包含时区。不能以聊天间隔、保存时间、模型生成或工具等待推算活动时长。模拟学习日不自动确定事件的具体时刻。
+新事件的规范化完整格式包含 time_source、time_evidence 和 occurred_at；输入可将未知时间三项一起省略，由程序补 unknown、空证据和 null。已知事件时间仅接受 learner_report 或 activity_timer，并写出对应活动的时间依据；occurred_at 需包含时区。不能以聊天间隔、保存时间、模型生成或工具等待推算活动时长。模拟学习日不自动确定事件的具体时刻。
 
 保存程序为新事件和摘要生成 recorded_at（真实系统时间），Agent 不提供此字段。它不是活动发生时间，也不用于向孩子计算“情绪花了多少分钟”。不确定实际经过多久时，只提示原安排可能需调整。
 
@@ -123,3 +131,8 @@ Learning Record 最终顺序为任务记录 → 今日小记 → 进一步聊到
 存在有效 pending 时，普通写入被阻止；recover 仅完成目标内容仍匹配原前／后状态的事务，然后 verify。意图损坏、外部编辑或无意图的不一致均停下保留诊断，不删除意图、不手工拼记录。仅有支持而 Review 未完成时不生成假正式记录；final 后新支持可在再次收尾时更新支持节，不重开 Review。
 
 verify 检查工程完整性而非事实真实性。旧记录没有 emotional_support 表示没有相应留存，不证明没有发生支持。
+
+
+## Final local save → optional team-space sync
+
+已 final 的记录在本次支持保存后仍为 final 时，按 [team-space-sync.md](team-space-sync.md) 处理新的已保存内容。未完成 Review 的支持暂停不上传为正式最终记录；保存提示不是云端成功证据。同步失败不影响已完成的本地保存。

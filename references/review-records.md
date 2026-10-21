@@ -8,11 +8,24 @@ Emotional support is factual recording, not a demand for interpretation or appra
 
 The Review UI lives in each Daily Page task card. Every task must have a completion value, actual duration, and expectation comparison before the learner explicitly saves the Review. Task Note and Daily Diary remain optional, unlimited free text.
 
-Actual duration is a non-negative integer: zero can truthfully represent an unstarted task. Missing duration is not zero and remains incomplete. Estimated duration must still be positive. Follow the declining/pausing/closing boundaries in `SKILL.md`: incomplete Review prevents a completed record, not the learner's right to stop now.
+Actual duration is a non-negative integer: zero can truthfully represent an unstarted task. Missing duration is not zero and remains incomplete. Estimated duration must still be positive. Follow the refusal/pause/closure boundaries in `SKILL.md`: incomplete Review prevents a completed record, not the learner's right to stop now.
 
 Auto-save preserves drafts, not formal completion. `saved_at` is a write timestamp; optional `review_saved_at` indicates an explicit page submission of current content, not permission to finalize the day. Always validate required values. A complete saved draft plus clear conversational Review Completed intent may proceed through the checkpoint; do not force a redundant button click. Neither a timestamp nor “保存好了” alone bypasses checks.
 
-Review Completed is a semantic conversation intent, not a page event or phrase match. After the learner clearly says the Daily Page Review is completed and saved, read both State files. If required Review values are missing, do not create records yet. If the learner wants to complete Review now, return them to the page and name only the missing items; otherwise respect their pause.
+Review Completed is a semantic conversation intent, not a page event or phrase match. After the learner clearly says the Daily Page Review is completed and saved, inspect the current saved facts using the formal read-only entry below. If required Review values are missing, do not create records yet. If the learner wants to complete Review now, return them to the page and name only the missing items; otherwise respect their pause.
+
+## Read-only current Review inspection
+
+```bash
+python3 <skill-package>/scripts/review_records.py \
+  --workspace <workspace-root> inspect
+```
+
+The JSON result contains `status`, `ready`, `checks`, `missing`, `errors` and `facts`. `status` is `ready`, `incomplete`, `missing` or `invalid`; only `ready=true` permits using it as complete Review evidence. `invalid` exits nonzero; a zero exit with `incomplete` or `missing` is not completion. Name only missing items when the learner wants to finish; invalid State is preserved for formal recovery.
+
+`facts` contains `record_date`, `tasks`, and `daily_diary`. Each task retains the original `assessment`, independent `coaching_result`, learner-authoritative `final_plan`, `actual_performance`, `review`, and original `task_note`, under its stable ID. Original learner free text is returned intact, not paraphrased by another model. Use these facts for semantic discussion decisions instead of manually checking all engineering structure in two full files. Relevant current conversation still matters even when page notes are empty. Do not implement a keyword trigger or discard original free text.
+
+Inspection is read-only: it does not initialize the workspace, write records or freeze future edits. Formal checkpoint creation still re-reads and validates current State under its normal lock; do not cache the view across learner edits or treat an earlier ready result as writing success. It cannot prove conversational meaning, claim truth or discussion readiness on its own.
 
 ## Semantic trigger decision
 
@@ -51,13 +64,13 @@ The Structured Record keeps the entire immutable Review snapshot under `review_c
 
 If discussion is needed, both records end in `review_saved`; otherwise they are immediately `final`. Preserve the original Review promptly when discussion continues; support not yet consolidated can wait until that discussion closes. If the learner closes without discussion, add `--support-file <batch.json>` to checkpoint to save any new support in the same transaction. Do not call the support saver first. No new support means omit the option.
 
-The helpers verify actual outputs and record consistency before reporting success. Do not add routine separate verify/read calls after every successful save. An interruption, recovery or diagnostic request can require an explicit verification. Never claim unrecorded chat support is already in the checkpoint.
+The helpers verify actual outputs and record consistency before reporting success. A completed successful current invocation establishes that both real outputs passed internal checks; continue without routine extra directory listing, file reread or standalone verify. Old/queued/running receipts, incomplete output and unknown write outcomes are not success. Interruption, recovery, suspected external edits or diagnosis can require formal verification. This local success does not prove cloud delivery. Never claim unrecorded chat support is already in the checkpoint.
 
 ## Selective Further Discussion
 
 Start from the identified signal, using the other saved Review data only as context. Establish what actually happened before explaining an expectation gap. Help the learner notice real positive evidence, understand experience, retain a lesson, identify an adjustment, revise resource use, or mark a possible follow-up only when the conversation supports that result. One or two turns can be enough, and not every discussion needs a lesson, an adjustment, or every result category.
 
-When the signal includes emotion, follow the cross-stage support guidance in `SKILL.md`. Respond to the learner's present experience as well as its learning impact. Completing the task, naming a likely source, or deciding that an event was one-time does not prove that the learner no longer needs support. Let them choose whether to say more, consider support or a practical adjustment, or simply be heard and finish. Do not extract a positive reframe or future strategy merely to fill the record.
+When the signal includes emotion, follow [emotional-support.md](emotional-support.md). Respond to the learner's present experience as well as its learning impact. Completing the task, naming a likely source, or deciding that an event was one-time does not prove that the learner no longer needs support. Let them choose whether to say more, consider support or a practical adjustment, or simply be heard and finish. Do not extract a positive reframe or future strategy merely to fill the record.
 
 Only record `possible_follow_up` when the learner explicitly describes recurrence or long duration, multiple tasks on the current day show the same issue, or the current discussion clearly establishes that the issue may persist. Do not read prior records to make this judgment, and never promise automatic next-day tracking or reminders.
 
@@ -75,15 +88,22 @@ Compare actual time to that task's saved Final Plan estimate before making time 
 
 This comparison concerns learner-entered task time, not inferred emotional-support duration. Chat/file timestamps and tool waiting cannot establish how long a learner spent managing feelings. Unknown activity or simulated event times remain unknown. Respond to current frustration before challenging a sweeping self-judgment; do not center the reply on defending why the Agent asked a question.
 
-Invite interpretation before declaring a strategy effective. An action first described in Review may have been independently chosen during execution; do not credit it as previously agreed Coaching. A learner saying “没办法，只能等” may express resignation, not relief; reflect only what they said and do not force a feeling label or another question when they want to finish. When a suggested action was not tried, do not impose another trial to vindicate it. Any new suggestion follows the current-topic permission rule.
+Invite interpretation before declaring a strategy effective. An action first described in Review may have been independently chosen during execution; do not credit it as previously agreed Coaching. A learner saying “没办法，只能等” may express resignation, not relief; reflect only what they said and do not force a feeling label or another question when they want to finish. When a suggested action was not tried, do not impose another trial to vindicate it. Any new suggestion follows the current-topic permission rule. Describe possible benefit and effort tentatively; do not promise “专治”, “不费力气” or “一定有效”.
 
-After the identified topics have received an appropriate response or the learner has declined further discussion, follow the natural closing rule in `SKILL.md`. Continue if the learner has more to say. Finalize only after clear Final Save intent in that context, and do not require a duplicate confirmation when the learner has already clearly asked to finish and save.
+After the identified topics have received an appropriate response or the learner has declined further discussion, ask one brief natural question about anything else to discuss/retain and ending the review only if current closure is not already clear. A contextual wish to finish need not contain the word “保存”. A support-option choice, factual answer or future return is not also final-save intent. Continue if the learner has more to say. Finalize only after clear Final Save intent in that context, and do not require a duplicate confirmation when the learner has already clearly asked to finish and save.
 
 ## Further Discussion handoff and final save
 
-Create a temporary handoff such as:
+If no discussion additions were formed and the learner clearly wants to finish after a valid checkpoint, omit the empty intermediate file and run:
 
-If nothing was added and the learner clearly wants to finish after a valid checkpoint, use `{"topics": [], "additional_notes": []}`. An explicit empty topics list is valid; a missing, null, or incorrectly typed list is not. Notes alone or a topic with observations but no lesson are valid too. Never invent a topic, lesson, or emotional resolution to satisfy saving. Respecting a learner's refusal to discuss is sufficient; resolving every identified concern is not a closing prerequisite.
+```bash
+python3 <skill-package>/scripts/review_records.py \
+  --workspace <workspace-root> finalize --no-additions
+```
+
+`--no-additions` and `--discussion-file` are mutually exclusive and one is required. The no-additions option constructs the same validated empty discussion structure (`{"topics": [], "additional_notes": []}`) internally, then uses the existing transaction, immutable checkpoint and verification. It is not permission to discard already-formed unsaved topics/notes. Add `--support-file <batch.json>` when actual support still needs saving, even when discussion itself is empty. Never invent a lesson, strategy or emotional resolution to satisfy closure. Respecting refusal is sufficient; resolving every concern is not required.
+
+When actual additions exist, create a handoff. Notes alone or a topic with observations but no lesson are valid. An explicit empty topics list remains compatible; missing, null or incorrectly typed topics is invalid.
 
 For a discussion that did produce supported content:
 
@@ -222,3 +242,8 @@ If discussion follows, the original learner text remains unchanged. Generated st
 ```
 
 The example reflection requires an actual learner-supported discussion; it is not a default lesson. When emotional support occurred, add the separate `## 情绪方面的支持` after this section using the consolidated factual summaries. Do not copy live questions or internal reasoning into it. With no discussion additions, omit the empty discussion section; with no support, omit the support section.
+
+
+## Final local save → optional team-space sync
+
+After internally verified `checkpoint --no-discussion`, finalization or a saved final same-day support update, follow [team-space-sync.md](team-space-sync.md). `review_saved`, drafts and incomplete pauses are not final uploads. A save command's sync handoff is an instruction for the next operation, not evidence of cloud success. Sync failures cannot roll back local records or rewrite Review/learner text.

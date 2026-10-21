@@ -35,6 +35,68 @@ from workspace_runtime import (
 
 
 DEFAULT_PORT = 8977
+REQUIRED_CAPABILITIES = {"explicit-review-save-v1", "recoverable-save-v2"}
+
+
+def _valid_port(value: Any) -> bool:
+    return type(value) is int and 1 <= value <= 65535
+
+
+def _metadata_for_workspace(
+    metadata: dict[str, Any] | None, workspace: Path, workspace_id: str
+) -> bool:
+    return bool(
+        metadata
+        and metadata.get("workspace_root") == str(workspace.resolve())
+        and metadata.get("workspace_id") == workspace_id
+    )
+
+
+def _launch_options(platform: str | None = None) -> tuple[str, dict[str, Any]]:
+    """Separate console/session lifetime from the command's redirected streams.
+
+    Neither branch bypasses a host's process cleanup or Windows Job policy.
+    A successful readiness check proves availability now, not indefinite lifetime.
+    """
+    environment = os.environ.copy()
+    environment["PYTHONIOENCODING"] = "utf-8"
+    environment["PYTHONDONTWRITEBYTECODE"] = "1"
+    options: dict[str, Any] = {
+        "stdin": subprocess.DEVNULL,
+        "close_fds": True,
+        "shell": False,
+        "env": environment,
+    }
+    if (platform or sys.platform) == "win32":
+        # DETACHED_PROCESS avoids inheriting the transient console. A new
+        # process group does not escape an enclosing WorkBuddy Job Object.
+        options["creationflags"] = (
+            getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+            | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+        )
+        return "windows-detached-console", options
+    options["start_new_session"] = True
+    return "posix-session", options
+
+
+def _persistent_session_fallback(workspace: Path, port: int) -> dict[str, Any]:
+    paths = ensure_workspace(workspace)
+    return {
+        "mode": "host-supported-persistent-terminal",
+        "argv": [
+            sys.executable, str(SCRIPT_DIR / "persistence_bridge.py"),
+            "--workspace", str(paths.workspace), "--port", str(port),
+            "--ready-file", str(paths.bridge_metadata),
+            "--process-token", uuid.uuid4().hex,
+        ],
+        "env": {"PYTHONIOENCODING": "utf-8", "PYTHONDONTWRITEBYTECODE": "1"},
+        "instruction": (
+            "The Agent may run this foreground command in a host-supported persistent "
+            "terminal, then use ensure to verify it. Keep the terminal alive. Do not "
+            "claim guaranteed lifetime or bypass host process cleanup. Preserve the "
+            "open page and its draft before changing the page URL."
+        ),
+    }
 
 
 def _read_json(path: Path) -> dict[str, Any] | None:
@@ -127,17 +189,20 @@ def _existing_bridge(workspace: Path, page: str) -> dict[str, Any] | None:
     marker = read_workspace_marker(paths.workspace)
     metadata = _read_json(paths.bridge_metadata)
     candidates: list[int] = []
-    if metadata and isinstance(metadata.get("port"), int):
+    if (
+        _metadata_for_workspace(metadata, paths.workspace, marker["workspace_id"])
+        and _valid_port(metadata.get("port"))
+    ):
         candidates.append(metadata["port"])
     if DEFAULT_PORT not in candidates:
         candidates.append(DEFAULT_PORT)
     for port in candidates:
         health = health_at(port)
-        if _matches_workspace(health, paths.workspace, marker["workspace_id"]) and (
-            "explicit-review-save-v1" not in health.get("capabilities", [])
+        if _matches_workspace(health, paths.workspace, marker["workspace_id"]) and not (
+            REQUIRED_CAPABILITIES.issubset(health.get("capabilities", []))
         ):
             raise WorkspaceRuntimeError(
-                "The workspace Bridge predates explicit Review submission. "
+                "The workspace Bridge predates the required recoverable-save protocol. "
                 "Preserve saved State; an authorized maintenance session must stop "
                 "the old Bridge with the formal stop helper before retrying ensure."
             )
@@ -146,12 +211,15 @@ def _existing_bridge(workspace: Path, page: str) -> dict[str, Any] | None:
         ):
             return {
                 "status": "reused",
-                "pid": metadata.get("pid") if metadata else None,
+                "pid": health.get("pid"),
                 "port": port,
                 "base_url": f"http://127.0.0.1:{port}",
                 "page_url": f"http://127.0.0.1:{port}/{page}.html",
                 "workspace_root": str(paths.workspace),
                 "workspace_id": marker["workspace_id"],
+                "launch_mode": "existing-process",
+                "lifetime_guarantee": "initial-readiness-only",
+                "port_changed": False,
             }
     return None
 
@@ -173,15 +241,23 @@ def _launch_bridge(workspace: Path, page: str, requested_port: int) -> dict[str,
         token,
     ]
     ensure_directory(paths.bridge_log.parent)
-    with paths.bridge_log.open("ab", buffering=0) as log_stream:
-        process = subprocess.Popen(
-            command,
-            stdin=subprocess.DEVNULL,
-            stdout=log_stream,
-            stderr=log_stream,
-            start_new_session=True,
-            close_fds=True,
-        )
+    launch_mode, launch_options = _launch_options()
+    try:
+        with paths.bridge_log.open("ab", buffering=0) as log_stream:
+            process = subprocess.Popen(
+                command,
+                stdout=log_stream,
+                stderr=log_stream,
+                **launch_options,
+            )
+    except OSError as error:
+        raise WorkspaceRuntimeError(json.dumps({
+            "error": f"Bridge could not start: {error}",
+            "workspace_root": str(paths.workspace),
+            "diagnostic_log": str(paths.bridge_log),
+            "launch_mode": launch_mode,
+            "persistent_session_fallback": _persistent_session_fallback(workspace, requested_port),
+        }, ensure_ascii=False)) from error
 
     deadline = time.monotonic() + 6.0
     while time.monotonic() < deadline:
@@ -206,14 +282,20 @@ def _launch_bridge(workspace: Path, page: str, requested_port: int) -> dict[str,
                         "page_url": f"http://127.0.0.1:{port}/{page}.html",
                         "workspace_root": str(paths.workspace),
                         "workspace_id": marker["workspace_id"],
+                        "launch_mode": launch_mode,
+                        "lifetime_guarantee": "initial-readiness-only",
                     }
         time.sleep(0.05)
 
     if process.poll() is None:
         process.terminate()
-    raise WorkspaceRuntimeError(
-        f"Bridge did not become ready for {paths.workspace}; diagnostic log: {paths.bridge_log}"
-    )
+    raise WorkspaceRuntimeError(json.dumps({
+        "error": "Bridge did not become ready",
+        "workspace_root": str(paths.workspace),
+        "diagnostic_log": str(paths.bridge_log),
+        "launch_mode": launch_mode,
+        "persistent_session_fallback": _persistent_session_fallback(workspace, requested_port),
+    }, ensure_ascii=False))
 
 
 def ensure_bridge(
@@ -235,13 +317,29 @@ def ensure_bridge(
     if existing:
         return existing
 
-    requested_port = 0 if _port_is_occupied(default_port) else default_port
+    marker = read_workspace_marker(paths.workspace)
+    metadata = _read_json(paths.bridge_metadata)
+    previous_port = (
+        metadata.get("port") if _metadata_for_workspace(
+            metadata, paths.workspace, marker["workspace_id"]
+        ) and _valid_port(metadata.get("port")) else None
+    )
+    preferred_port = previous_port if previous_port is not None else default_port
+    requested_port = 0 if _port_is_occupied(preferred_port) else preferred_port
     try:
-        return _launch_bridge(paths.workspace, page, requested_port)
+        result = _launch_bridge(paths.workspace, page, requested_port)
     except WorkspaceRuntimeError:
         if requested_port == 0:
             raise
-        return _launch_bridge(paths.workspace, page, 0)
+        result = _launch_bridge(paths.workspace, page, 0)
+    result["port_changed"] = previous_port is not None and result["port"] != previous_port
+    if result["port_changed"]:
+        result["origin_notice"] = (
+            "The previous port is unavailable. Keep the old page open and preserve or "
+            "export its draft before opening the new URL; browser draft storage does "
+            "not automatically transfer between ports."
+        )
+    return result
 
 
 def bridge_status(workspace: Path) -> dict[str, Any]:
@@ -263,12 +361,29 @@ def stop_bridge(workspace: Path) -> dict[str, Any]:
         return {"status": "not_running", "workspace_root": str(paths.workspace)}
     pid = status.get("pid")
     port = status.get("port")
-    if not isinstance(pid, int) or not isinstance(port, int):
+    if type(pid) is not int or pid <= 0 or pid == os.getpid() or not _valid_port(port):
         raise WorkspaceRuntimeError("Bridge metadata has no valid pid/port; refusing to stop a process")
-    os.kill(pid, signal.SIGTERM)
+    token = status.get("process_token")
+    if not isinstance(token, str) or not token:
+        raise WorkspaceRuntimeError("Bridge has no process token; refusing to stop an unverified process")
+    # On Windows SIGTERM terminates the selected PID immediately. Require the
+    # live token; RC7 also reports its PID, while legacy Bridges lack that field.
+    health = health_at(port)
+    marker = read_workspace_marker(paths.workspace)
+    if not _matches_workspace(
+        health, paths.workspace, marker["workspace_id"], process_token=token
+    ) or (health.get("pid") is not None and health.get("pid") != pid):
+        raise WorkspaceRuntimeError("Bridge process identity changed; refusing to stop a process")
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return {"status": "not_running", "workspace_root": str(paths.workspace)}
     deadline = time.monotonic() + 3.0
     while time.monotonic() < deadline:
-        if health_at(port, timeout=0.15) is None:
+        if not _matches_workspace(
+            health_at(port, timeout=0.15), paths.workspace, marker["workspace_id"],
+            process_token=token,
+        ):
             return {"status": "stopped", "pid": pid, "port": port}
         time.sleep(0.05)
     raise WorkspaceRuntimeError(f"Bridge process {pid} did not stop after SIGTERM")

@@ -4,10 +4,12 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
 import sys
+import threading
 from datetime import date, datetime, timezone
 from functools import partial
 from http import HTTPStatus
@@ -29,7 +31,10 @@ from workspace_runtime import (
     mark_runtime_user_saved,
     read_workspace_marker,
     runtime_summary,
+    page_context,
 )
+
+from platform_lock import nonblocking_file_lock
 
 
 MAX_BODY_BYTES = 1_000_000
@@ -344,7 +349,7 @@ def validate_daily_page_state(
 
 
 class DailySRLHandler(SimpleHTTPRequestHandler):
-    server_version = "DailySRLBridge/3.0"
+    server_version = "DailySRLBridge/4.0"
 
     def __init__(
         self,
@@ -368,13 +373,20 @@ class DailySRLHandler(SimpleHTTPRequestHandler):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
 
-    def send_json(self, status: HTTPStatus, payload: dict[str, Any]) -> None:
+    def send_json(self, status: HTTPStatus, payload: dict[str, Any], *, headers: dict[str, str] | None = None) -> None:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        for name, value in (headers or {}).items():
+            self.send_header(name, value)
         self.end_headers()
         self.wfile.write(body)
+
+    def state_headers(self, kind: str, state: dict[str, Any]) -> dict[str, str]:
+        canonical = json.dumps(state, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        return {"ETag": '"' + hashlib.sha256(canonical.encode("utf-8")).hexdigest() + '"',
+                "X-Daily-SRL-Context": page_context(kind, state, self.workspace_id)["runtime_id"]}
 
     def read_assessment_state(self) -> dict[str, Any]:
         with self.assessment_state_path.open("r", encoding="utf-8") as stream:
@@ -386,6 +398,14 @@ class DailySRLHandler(SimpleHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
+        if path == "/save-client.js":
+            body = (SCRIPT_DIR.parent / "templates" / "save-client.js").read_bytes()
+            self.send_response(HTTPStatus.OK)
+            self.send_header("Content-Type", "text/javascript; charset=utf-8")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path == "/health":
             pairs = runtime_summary(self.workspace_root)
             state_validity: dict[str, bool | None] = {
@@ -414,7 +434,8 @@ class DailySRLHandler(SimpleHTTPRequestHandler):
                     "workspace_id": self.workspace_id,
                     "runtime_dir": str(self.runtime_dir),
                     "process_token": self.process_token,
-                    "capabilities": ["explicit-review-save-v1"],
+                    "pid": os.getpid(),
+                    "capabilities": ["explicit-review-save-v1", "recoverable-save-v2"],
                     "runtime_pairs": pairs,
                     "state_valid": state_validity,
                 },
@@ -428,7 +449,7 @@ class DailySRLHandler(SimpleHTTPRequestHandler):
             except (json.JSONDecodeError, ValueError, OSError) as error:
                 self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"invalid state on disk: {error}"})
             else:
-                self.send_json(HTTPStatus.OK, state)
+                self.send_json(HTTPStatus.OK, state, headers=self.state_headers("assessment", state))
             return
         if path == "/api/daily-page-state":
             try:
@@ -438,7 +459,7 @@ class DailySRLHandler(SimpleHTTPRequestHandler):
             except (json.JSONDecodeError, ValueError, OSError) as error:
                 self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"invalid state on disk: {error}"})
             else:
-                self.send_json(HTTPStatus.OK, state)
+                self.send_json(HTTPStatus.OK, state, headers=self.state_headers("daily-page", state))
             return
         if path == "/":
             self.send_response(HTTPStatus.FOUND)
@@ -471,29 +492,52 @@ class DailySRLHandler(SimpleHTTPRequestHandler):
             return
         try:
             payload = json.loads(self.rfile.read(length))
-            if path == "/api/assessment-state":
-                state = validate_assessment_state(payload, mark_saved=True)
-                state_path = self.assessment_state_path
-            else:
-                baseline = self.read_daily_page_state()
-                save_mode = self.headers.get("X-Daily-SRL-Save", "draft")
-                if save_mode not in {"draft", "review"}:
-                    raise ValueError("invalid Daily SRL save mode")
-                state = validate_daily_page_state(
-                    payload, mark_saved=True, baseline=baseline,
-                    require_complete=save_mode == "review",
-                )
-                state_path = self.daily_page_state_path
             kind = "assessment" if path == "/api/assessment-state" else "daily-page"
-            mark_runtime_user_saved(self.workspace_root, kind)
-            atomic_write_json(state_path, state)
+            # Validate malformed submissions before any write or protocol mutation.
+            if kind == "assessment":
+                validate_assessment_state(payload, mark_saved=True)
+            else:
+                validate_daily_page_state(payload, mark_saved=True)
+            if not self.headers.get("If-Match") or not self.headers.get("X-Daily-SRL-Context"):
+                self.send_json(HTTPStatus.PRECONDITION_REQUIRED,
+                               {"error": "请保留当前输入，从对话重新打开更新后的页面再保存。", "code": "precondition_required"})
+                return
+            with self.server.save_lock:
+                with nonblocking_file_lock(self.workspace_root / ".daily-srl" / "page-save.lock",
+                                           busy_message="页面正在由其他进程保存，请保留输入后重试。"):
+                    baseline = self.read_assessment_state() if kind == "assessment" else self.read_daily_page_state()
+                    current_headers = self.state_headers(kind, baseline)
+                    incoming_context = page_context(kind, payload, self.workspace_id)["runtime_id"]
+                    if (self.headers.get("X-Daily-SRL-Context") != current_headers["X-Daily-SRL-Context"]
+                            or incoming_context != current_headers["X-Daily-SRL-Context"]):
+                        self.send_json(HTTPStatus.CONFLICT,
+                                       {"error": "当前学习页面已更换，原输入已保留，请回到对话确认当前页面。", "code": "runtime_changed"},
+                                       headers=current_headers)
+                        return
+                    if self.headers.get("If-Match") != current_headers["ETag"]:
+                        self.send_json(HTTPStatus.PRECONDITION_FAILED,
+                                       {"error": "已保存的内容有更新，当前草稿已保留，请核对后再保存。", "code": "state_changed"},
+                                       headers=current_headers)
+                        return
+                    if kind == "assessment":
+                        state = validate_assessment_state(payload, mark_saved=True)
+                        state_path = self.assessment_state_path
+                    else:
+                        save_mode = self.headers.get("X-Daily-SRL-Save", "draft")
+                        if save_mode not in {"draft", "review"}:
+                            raise ValueError("invalid Daily SRL save mode")
+                        state = validate_daily_page_state(payload, mark_saved=True, baseline=baseline,
+                                                          require_complete=save_mode == "review")
+                        state_path = self.daily_page_state_path
+                    mark_runtime_user_saved(self.workspace_root, kind)
+                    atomic_write_json(state_path, state)
         except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as error:
             self.send_json(HTTPStatus.BAD_REQUEST, {"error": str(error)})
             return
         except (OSError, WorkspaceRuntimeError) as error:
             self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"could not write state: {error}"})
             return
-        self.send_json(HTTPStatus.OK, {"ok": True, "state": state})
+        self.send_json(HTTPStatus.OK, {"ok": True, "state": state}, headers=self.state_headers(kind, state))
 
     def log_message(self, format: str, *args: Any) -> None:
         super().log_message(format, *args)
@@ -501,6 +545,10 @@ class DailySRLHandler(SimpleHTTPRequestHandler):
 
 class ReusableThreadingHTTPServer(ThreadingHTTPServer):
     allow_reuse_address = True
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self.save_lock = threading.RLock()
+        super().__init__(*args, **kwargs)
 
 
 def create_server(

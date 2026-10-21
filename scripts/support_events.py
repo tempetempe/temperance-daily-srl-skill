@@ -16,6 +16,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from workspace_runtime import ensure_workspace, ensure_directory, WorkspaceRuntimeError
+from platform_lock import nonblocking_file_lock
 
 ID = re.compile(r"[A-Za-z0-9_-]{1,80}\Z")
 PHASES = {"entry", "planning", "coaching", "execution", "review", "further_discussion", "after_review"}
@@ -63,20 +64,12 @@ def paths_for(workspace, day):
 
 @contextmanager
 def day_lock(workspace, day, *, recovering=False):
-    import fcntl  # WorkBuddy macOS/Linux; fail explicitly on unsupported hosts.
     paths, targets = paths_for(workspace, day)
     lock = targets[0].with_suffix(".lock")
-    with lock.open("a", encoding="utf-8") as stream:
-        try:
-            fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise ValueError("another writer is saving this date; retry after it finishes") from exc
-        try:
-            if not recovering and targets[0].with_suffix(".pending.json").exists():
-                raise ValueError("interrupted record transaction; use support_events.py recover for this date")
-            yield paths, targets
-        finally:
-            fcntl.flock(stream, fcntl.LOCK_UN)
+    with nonblocking_file_lock(lock, busy_message="another writer is saving this date; retry after it finishes"):
+        if not recovering and targets[0].with_suffix(".pending.json").exists():
+            raise ValueError("interrupted record transaction; use support_events.py recover for this date")
+        yield paths, targets
 
 
 def text(value, field, *, empty=False):
@@ -308,7 +301,7 @@ def commit(workspace, day, outputs, expected_before=None):
         if destination.is_symlink():
             raise ValueError("backup must not be a symlink")
         try:
-            with destination.open("x", encoding="utf-8") as stream:
+            with destination.open("x", encoding="utf-8", newline="\n") as stream:
                 stream.write(backup)
                 stream.flush()
                 os.fsync(stream.fileno())
@@ -375,7 +368,35 @@ def recover(workspace, day):
         return {"recovered": True, "record_date": day}
 
 
+def normalize_batch_input(batch):
+    """Fill only mechanical defaults; preserve supplied facts, IDs and invalid values.
+
+    Compact input is an input convenience, not a new stored journal schema.
+    Time is unknown only when its entire triple is omitted. Partial or explicit
+    timing continues through the strict validator without invented evidence.
+    """
+    if not isinstance(batch, dict):
+        return batch  # Existing validation supplies the contract error.
+    result = copy.deepcopy(batch)
+    if isinstance(result.get("events"), list):
+        for item in result["events"]:
+            if not isinstance(item, dict):
+                continue
+            if not ({"occurred_at"} | TIME_FIELDS) & item.keys():
+                item.update(occurred_at=None, time_source="unknown", time_evidence="")
+            for field, default in (("related_task_ids", []), ("related_event_id", None), ("strategy_ids", [])):
+                if field not in item:
+                    item[field] = copy.deepcopy(default)
+    if isinstance(result.get("summaries"), list):
+        for item in result["summaries"]:
+            if isinstance(item, dict) and "supersedes" not in item:
+                item["supersedes"] = None
+    return result
+
+
 def merge_batch(journal, batch, task_ids, *, legacy=False):
+    if not legacy:
+        batch = normalize_batch_input(batch)
     if not isinstance(batch, dict) or set(batch) != {"schema_version", "events", "summaries"} or batch["schema_version"] != 2:
         raise ValueError("batch requires schema_version 2, events and summaries")
     if not isinstance(batch["events"], list) or not isinstance(batch["summaries"], list):
@@ -501,6 +522,8 @@ def main():
                 result = load_journal(args.workspace, args.date)
     except (OSError, ValueError, KeyError, TypeError, ImportError, WorkspaceRuntimeError) as error:
         raise SystemExit(f"error: {error}") from error
+    if args.command in {"save", "save-batch"} and result.get("record_status") == "final":
+        result["team_space_sync"] = {"sync_next": "discover_current_host_spaces", "record_date": args.date}
     print(encode(result), end="")
 
 
