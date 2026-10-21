@@ -102,7 +102,7 @@
 
 ### 方式二：命令行安装
 
-在支持 `.agents/skills/` 的 Agent 项目目录中，将下面的命令粘贴到电脑终端运行：
+在支持 `.agents/skills/` 的 Agent 项目目录中运行：
 
 ```sh
 git clone --branch v6.0 --depth 1 https://github.com/tempetempe/temperance-daily-srl-skill.git .agents/skills/daily-srl-skill
