@@ -89,22 +89,18 @@
 
 ## 安装
 
-### 方式一：直接命令安装
+### 方式一：直接发给 AI（推荐）
 
-在支持项目级 `.agents/skills/` 的 Agent 项目目录中运行：
+```text
+请帮我安装这个 Skill：https://github.com/tempetempe/temperance-daily-srl-skill
+```
+
+### 方式二：命令行安装
+
+在支持 `.agents/skills/` 的 Agent 项目目录中，将下面的命令粘贴到电脑终端运行：
 
 ```sh
 git clone --branch v6.0 --depth 1 https://github.com/tempetempe/temperance-daily-srl-skill.git .agents/skills/daily-srl-skill
-```
-
-### 方式二：把下面这段话直接发给 AI
-
-```text
-帮我安装“以起草之名-每日计划与复盘”这个 Skill：
-1. 从 https://github.com/tempetempe/temperance-daily-srl-skill 的 v6.0 标签获取完整 Skill，安装到当前 Agent 支持的技能目录。
-2. 检查 SKILL.md 中的 name 是“以起草之名-每日计划与复盘”，scripts/、templates/、references/ 均完整，保留原有中文名称。
-3. 按当前 Agent 支持的方式重新加载技能，确认实际识别到的名称后告诉我结果；不要仅凭文件下载成功就声称已加载。
-安装完成后，我会在新对话里说“我想整理和安排一下今天的学习任务”开始使用。
 ```
 
 ## 当前版本
