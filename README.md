@@ -19,7 +19,7 @@
 | **提升体验与掌控力** | 通过更清楚的安排、可修改的计划和真实的执行反馈，减少混乱感，逐渐掌握自己的学习节奏。 |
 | **充分引导而不替代** | Agent 会一步步帮助你识别困难、考虑资源和形成办法；学习者始终可以补充、纠正、拒绝或调整。 |
 
-如果你也关心如何系统地提升学习能力，欢迎关注公众号「以起草之名」，了解我们基于「每日计划与复盘（Daily SRL Skill）」推出的「学习力发展计划」。
+> **如果你也关心如何系统地提升学习能力，欢迎关注公众号「以起草之名」，了解我们基于「每日计划与复盘（Daily SRL Skill）」推出的「学习力发展计划」。**
 
 ## 页面效果
 
@@ -90,19 +90,15 @@
 
 ### 命令行安装
 
-先安装 [Git](https://git-scm.com/downloads)。如果使用的 Agent 支持项目级 `.agents/skills/` 目录，在项目目录中打开终端，运行以下命令即可获取完整 Skill。Windows PowerShell 和 macOS 终端使用相同命令：
-
 ```sh
 git clone --branch v6.0 --depth 1 https://github.com/tempetempe/temperance-daily-srl-skill.git .agents/skills/daily-srl-skill
 ```
 
-此命令固定使用正式版 `v6.0`，将 `SKILL.md`、脚本、模板和参考资料一起放入 `.agents/skills/daily-srl-skill/`。如果 Agent 使用其他技能目录，请将命令最后的路径替换为该目录下的 `daily-srl-skill` 子目录。目标目录应尚不存在；已有旧版时，先按 Agent 的方式停用或移走旧版，再安装。
+### 在 Agent 中安装
 
-完成后，按所用 Agent 的规则刷新技能或开启新会话，选择保存学习资料的本地工作区，再使用上面的触发语开始。技能文件与学习工作区可以分别存放。
-
-以上为通用安装方法，具体支持的技能目录与加载方式以所用 Agent 的说明为准。仓库公开后可直接通过上述命令获取，无需 GitHub 账号；仓库仍为 Private 时，需要具有访问权限的 GitHub 账号。
-
-运行脚本使用 Python 标准库，不需要额外安装 Python 包。6.0 包含 Windows 与 Mac 的保存服务启动适配，以及平台原生文件锁。Mac 本机开发验证与 Windows 分支模拟分别记录；真实 WorkBuddy 的进程管理和浏览器恢复表现仍以实际使用为准。升级时保留完整学习工作区，避免同名旧版同时生效。
+```text
+请从 https://github.com/tempetempe/temperance-daily-srl-skill 安装 v6.0 版本的完整 Skill 到当前 Agent 的技能目录，并确认已加载。
+```
 
 ## 本地学习记录
 
