@@ -98,11 +98,7 @@ git clone --branch v6.0 --depth 1 https://github.com/tempetempe/temperance-daily
 
 完成后，按所用 Agent 的规则刷新技能或开启新会话，选择保存学习资料的本地工作区，再使用上面的触发语开始。技能文件与学习工作区可以分别存放。
 
-### 不使用命令行
-
-下载 [`v6.0` 源码 ZIP](https://github.com/tempetempe/temperance-daily-srl-skill/archive/refs/tags/v6.0.zip)，解压后，将包含 `SKILL.md` 的完整目录放入 Agent 的技能目录，并按该 Agent 的规则加载。保留 `scripts/`、`templates/`、`references/` 等配套文件，不要只复制 `SKILL.md`。
-
-以上为通用安装方法，具体支持的技能目录与加载方式以所用 Agent 的说明为准。仓库公开后可直接下载，无需 GitHub 账号；仓库仍为 Private 时，需要具有访问权限的 GitHub 账号。
+以上为通用安装方法，具体支持的技能目录与加载方式以所用 Agent 的说明为准。仓库公开后可直接通过上述命令获取，无需 GitHub 账号；仓库仍为 Private 时，需要具有访问权限的 GitHub 账号。
 
 运行脚本使用 Python 标准库，不需要额外安装 Python 包。6.0 包含 Windows 与 Mac 的保存服务启动适配，以及平台原生文件锁。Mac 本机开发验证与 Windows 分支模拟分别记录；真实 WorkBuddy 的进程管理和浏览器恢复表现仍以实际使用为准。升级时保留完整学习工作区，避免同名旧版同时生效。
 
