@@ -61,6 +61,16 @@ This is today's actionable outcome, not a chat transcript or a list of every opt
 
 For each claim, locate its source words/saved value, speaker and certainty; for actions also locate the learner's choice and any separate execution evidence. “Probably available” is not another person's confirmation; a blank note is not evidence that a difficulty did not occur. Never attribute your explanation to the learner. Silence, answering another question and page-generation permission do not confirm unselected suggestions. Omit unsupported items or clarify only essentials. Apply this source check to dialogue summaries and discussion additions too. Scripts validate structure and preservation, not conversational truth; a self-authored “confirmed” label is not proof.
 
+At the same handoff, retain lightweight source evidence for the decisive obstacle judgments and chosen actions in the task-level `coaching_provenance` array, alongside `coaching_result`. Do this while the exchange is available, not by reconstructing Coaching after Review. Each item has exactly:
+
+- `statement`: the exact text of one result item at generation, retained as a snapshot;
+- `origin`: `learner_initiated` (learner offered it without an Agent cue for that idea), `learner_after_prompt` (learner formed it after a recall/clarification prompt), `agent_suggested` (Agent proposed it and the learner chose it), `joint` (both materially shaped it), or `unknown`;
+- `evidence`: a short array of necessary source quotations, each with its speaker, such as `学习者：我想先翻笔记，把还不懂的地方标出来。`. Except for `unknown`, at least one quotation is required. Agent-suggested action evidence must retain the learner's actual choice as well as the proposal.
+
+Record only the few consequential statements, not every resource, turn, or rejected option. Use `unknown` when origin cannot be supported; do not infer independent thinking from confidence, assent, or absence of Coaching. These origins describe how a statement formed, not ability scores, execution, or benefit. Necessary evidence is not a full transcript and excludes unrelated private details. No learner form or extra confirmation is required.
+
+The source snapshot remains about its original `statement` if the learner later edits the visible result; do not silently attribute the edited wording to the old source or rewrite the evidence. The field is internal and is preserved through page saves and final records. Legacy records or uncoached tasks may lack it; absence means no retained provenance, not learner independence. See [daily-page.md](daily-page.md) for the handoff and persistence boundary.
+
 The learner-originated approach requirement below applies to learning management. If the learner explicitly chooses help with the present feeling, follow [emotional-support.md](emotional-support.md): the Agent may guide support, while acceptance and continuation remain the learner's choices. Do not transfer that permission back to learning plans.
 
 ## Match resources to the obstacle, and group only a shared obstacle

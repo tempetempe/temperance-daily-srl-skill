@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN" data-daily-srl-client="2">
+<html lang="zh-CN" data-daily-srl-client="2" data-daily-srl-view="process-and-task-note-v1">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -108,7 +108,7 @@
       <div>
         <p class="eyebrow">每日自主学习</p>
         <h1>今日学习计划</h1>
-        <p class="subtitle">这是我们刚刚一起确认的安排。修改会自动暂存，不等于复盘已完成；任务做完后，填写复盘并点击“保存今日复盘”。任务备注和今日小记可以留空。</p>
+        <p class="subtitle">这是我们刚刚一起确认的安排。修改会自动暂存，不等于复盘已完成；任务做完后，填写复盘并点击“保存今日复盘”。实际过程、任务备注和今日小记可以留空。</p>
       </div>
       <div class="date-box"><span>计划日期</span><strong id="page-date">—</strong></div>
     </header>
@@ -152,19 +152,19 @@
         {
           task_id: "task-preview-001", source_confidence: "confident", visual_state: "normal", coaching_result: null,
           final_plan: { task: "完成英语阅读练习", planned_start: "19:00", estimated_duration_minutes: 30 },
-          review: { completion: "", completion_details: "", actual_duration_minutes: null, expectation: "", task_note: "" }
+          review: { completion: "", completion_details: "", actual_duration_minutes: null, expectation: "", execution_process: "", task_note: "" }
         },
         {
           task_id: "task-preview-002", source_confidence: "uncertain", visual_state: "notice",
           coaching_result: { main_obstacles: ["今天课堂上的函数图像还没有完全听懂"], actions: ["先看课堂例题，再做两道同类型题确认理解"], resources: ["课堂笔记第 12 页", "老师发的例题讲解"], help_or_communication: [], other_confirmed_information: [] },
           final_plan: { task: "订正数学练习", planned_start: "19:40", estimated_duration_minutes: 45 },
-          review: { completion: "", completion_details: "", actual_duration_minutes: null, expectation: "", task_note: "" }
+          review: { completion: "", completion_details: "", actual_duration_minutes: null, expectation: "", execution_process: "", task_note: "" }
         },
         {
           task_id: "task-preview-003", source_confidence: "not_confident", visual_state: "focus",
           coaching_result: { main_obstacles: ["今晚可用时间与作业量冲突"], actions: ["先确认不可变的提交要求"], resources: [], help_or_communication: ["向老师说明今晚的现实时间并确认可否调整截止时间"], other_confirmed_information: ["未确认新要求前不自行降低交付标准"] },
           final_plan: { task: "完成实验报告", planned_start: "20:30", estimated_duration_minutes: 60 },
-          review: { completion: "", completion_details: "", actual_duration_minutes: null, expectation: "", task_note: "" }
+          review: { completion: "", completion_details: "", actual_duration_minutes: null, expectation: "", execution_process: "", task_note: "" }
         }
       ],
       daily_diary: ""
@@ -231,6 +231,10 @@
       if (completion === "not_completed") return { label: "这次没有完成，发生了什么？", placeholder: "可以简单记下当时的情况或主要原因。" };
       return { label: "实际安排发生了什么变化？", placeholder: "可以简单记下时间、顺序或任务内容发生了什么变化。" };
     }
+    function reviewNoteText(value) {
+      // HTML textarea parsing discards one initial LF; compensate without changing the saved words.
+      return (value.startsWith("\n") ? "\n" : "") + escapeHtml(value);
+    }
     function reviewSection(task) {
       const review = task.review;
       const showDetails = ["partial", "not_completed", "changed"].includes(review.completion);
@@ -255,8 +259,12 @@
             ${choiceGroup(task.task_id, "expectation", review.expectation, [["better", "比预想更好"], ["as_expected", "和预想差不多"], ["below_expected", "没有达到预期"]])}
           </div>
           <div class="field full">
-            <label>关于这个任务，还有什么想记下来的吗？</label>
-            <textarea class="review-note" data-task-id="${escapeHtml(task.task_id)}" data-scope="review" data-field="task_note" placeholder="有什么是你觉得自己处理得不错的？\n今天这件事让你发现了什么？\n有没有什么经验或教训值得记下来？\n如果再来一次，有什么想调整的？\n有没有什么还没想明白、想继续解决的问题？\n或者写下任何你想留下来的话。">${escapeHtml(review.task_note)}</textarea>
+            <label>实际做这项任务时，你是怎么做的？和原来想的有什么不同吗？</label>
+            <textarea class="review-note execution-process" data-task-id="${escapeHtml(task.task_id)}" data-scope="review" data-field="execution_process" placeholder="可以说说用了什么方法或帮助、有没有临时换个做法，或者遇到什么没想到的情况。按原来的做法完成，也可以直接记录。">${reviewNoteText(review.execution_process ?? "")}</textarea>
+          </div>
+          <div class="field full">
+            <label>关于这项任务，还有什么值得记下来的？</label>
+            <textarea class="review-note task-note" data-task-id="${escapeHtml(task.task_id)}" data-scope="review" data-field="task_note" placeholder="可以记下处理得不错的地方、新的发现、值得记住的经验，或者还没想明白的问题。">${reviewNoteText(review.task_note)}</textarea>
           </div>
         </div>
       </section>`;
@@ -300,7 +308,7 @@
           if (field === "actual_duration_minutes") {
             task.review[field] = control.value ? Number(control.value) : null;
           } else {
-            task.review[field] = control.value.trim();
+            task.review[field] = ["execution_process", "task_note"].includes(field) ? control.value : control.value.trim();
           }
         } else if (field === "estimated_duration_minutes") {
           task.final_plan[field] = Number(control.value);

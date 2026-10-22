@@ -6,7 +6,11 @@ Emotional support is factual recording, not a demand for interpretation or appra
 
 ## Review completion gate
 
-The Review UI lives in each Daily Page task card. Every task must have a completion value, actual duration, and expectation comparison before the learner explicitly saves the Review. Task Note and Daily Diary remain optional, unlimited free text.
+The Review UI lives in each Daily Page task card. Every task must have a completion value, actual duration, and expectation comparison before the learner explicitly saves the Review. Actual process, Task Note, and Daily Diary remain optional, unlimited free text.
+
+Every task has the fixed actual-process question “实际做这项任务时，你是怎么做的？和原来想的有什么不同吗？” under `review.execution_process`, followed by “关于这项任务，还有什么值得记下来的？” under `review.task_note`. Keep the two original answers independent in inspection, checkpoint, final Structured Record, and readable Learning Record. Day-level `daily_diary` remains overall and open. Use reported methods, help, changes, or unexpected events as evidence only to the extent actually stated. Ordinary execution and no special method are valid accounts. Missing content is unreported, not “not used”. Without a pre-execution method record, a retrospective description cannot prove the method was planned beforehand.
+
+In inspect facts and checkpoint tasks, `execution_process` is alongside `task_note`, matching the existing task-level record layout. Preserve the optional key only when present in State. Do not move or copy pre-RC2 `task_note` text, backfill a process field, or change an existing checkpoint. When a legacy record has no process key, its old readable rendering is unchanged so integrity checks and supported same-day finalization remain compatible.
 
 Actual duration is a non-negative integer: zero can truthfully represent an unstarted task. Missing duration is not zero and remains incomplete. Estimated duration must still be positive. Follow the refusal/pause/closure boundaries in `SKILL.md`: incomplete Review prevents a completed record, not the learner's right to stop now.
 
@@ -25,6 +29,8 @@ The JSON result contains `status`, `ready`, `checks`, `missing`, `errors` and `f
 
 `facts` contains `record_date`, `tasks`, and `daily_diary`. Each task retains the original `assessment`, independent `coaching_result`, learner-authoritative `final_plan`, `actual_performance`, `review`, and original `task_note`, under its stable ID. Original learner free text is returned intact, not paraphrased by another model. Use these facts for semantic discussion decisions instead of manually checking all engineering structure in two full files. Relevant current conversation still matters even when page notes are empty. Do not implement a keyword trigger or discard original free text.
 
+When present in State, the same task also retains `coaching_provenance` unchanged in inspection and `review_checkpoint`, and hence in the final Structured Record. It is internal source evidence for the original result statements, not learner-facing commentary or execution evidence. Do not infer a source for legacy records without it or refresh it from Review. The learner-facing Learning Record continues to preserve the actual-process answer in its existing task-note section; source metadata is not rendered as a new child-facing section.
+
 Inspection is read-only: it does not initialize the workspace, write records or freeze future edits. Formal checkpoint creation still re-reads and validates current State under its normal lock; do not cache the view across learner edits or treat an earlier ready result as writing success. It cannot prove conversational meaning, claim truth or discussion readiness on its own.
 
 ## Semantic trigger decision
@@ -32,7 +38,7 @@ Inspection is read-only: it does not initialize the workspace, write records or 
 Before running the checkpoint command, decide semantically whether Further Discussion is needed.
 
 - Expectation Gap triggers: `better` or `below_expected`. `as_expected` does not trigger by itself.
-- Learner Signal triggers: material meaning in Task Note, Daily Diary, or the current relevant conversation, such as positive evidence, difficult experience, emotion, discovery, lesson, confusion, unresolved problem, help request, self-negation, possible ongoing issue, or an expressed wish to discuss.
+- Learner Signal triggers: material meaning in actual process, Task Note, Daily Diary, or the current relevant conversation, such as positive evidence, difficult experience, emotion, discovery, lesson, confusion, unresolved problem, help request, self-negation, possible ongoing issue, or an expressed wish to discuss. A routine account of execution or the mere presence of either optional text does not require more discussion.
 - Completion, duration difference, Coaching Result, and Final Plan are evidence used to understand a trigger, not independent trigger families.
 
 Do not implement this decision with keyword or regular-expression matching. Interpret the text in context. A diary can mention a difficult word without asking for discussion, or express a meaningful concern without using any anticipated vocabulary.
@@ -145,7 +151,7 @@ The finalizer:
 - verifies the existing files and saves a recoverable pre-update copy before rebuilding generated layout;
 - preserves original learner wording, but updates generated status text and chapter order rather than requiring the entire old Markdown as a byte prefix.
 
-The new discussion may explain the Review but must never replace Assessment, Coaching Result, Final Plan, Actual Performance, Review wording, Task Note, or Daily Diary.
+The new discussion may explain the Review but must never replace Assessment, Coaching Result, Final Plan, Actual Performance, Review wording, actual process, Task Note, or Daily Diary.
 
 ## Write failure and recovery
 
@@ -187,6 +193,7 @@ An abrupt stop between replacements is not a truly atomic cross-file transaction
           "actual_duration_minutes": 48
         },
         "review": {"expectation": "better"},
+        "execution_process": "先看课堂例题，再试着独立完成练习。",
         "task_note": "先看例题以后比预想顺利。"
       }
     ],
@@ -219,6 +226,9 @@ The learner-facing canonical record is `Learning Records/YYYY-MM-DD.md`; it uses
 
 ### 复盘
 - 与原先预期相比：没有达到预期
+
+#### 实际做这项任务时，你是怎么做的？和原来想的有什么不同吗？
+> 时间不够时，我先标记了不会的题和具体卡点。
 
 #### 关于这个任务，还有什么想记下来的？
 > 虽然没有全部做完，但我及时标记了卡点。

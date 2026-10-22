@@ -5,7 +5,7 @@ description: 帮助学习者整理今天或当前时段的学习任务，通过�
 
 # Daily SRL Skill
 
-Release: 6.0. This entry defines the shared learning contract and stage routing. Each linked reference is authoritative for its stage details. Preserve the two interactive pages, learner-led learning management, immutable Review facts and local-first storage. The host Agent executes the whole flow; the learner supplies experience and choices, not technical stage instructions. Development checks do not substitute for the project owner's real WorkBuddy / Windows / cross-device acceptance.
+Release: 7.1. This entry defines the shared learning contract and stage routing. Each linked reference is authoritative for its stage details. Preserve the two interactive pages, learner-led learning management, immutable Review facts and local-first storage. The host Agent executes the whole flow; the learner supplies experience and choices, not technical stage instructions. Development checks do not substitute for the project owner's real WorkBuddy / Windows / cross-device acceptance.
 
 ## Load only the current rules
 
@@ -34,6 +34,8 @@ This Skill manages learning. Do not proactively teach concepts, derive formulas,
 When an answer determines direction, ask and end the turn. Wait before pursuing an unselected branch or supplying advice. Follow already-clear wishes without repeating permission questions. Before sending, check the answer's actual referent, negations and refusals; do not append instructions after a choice question or turn encouragement into pressure to finish. For learning management, invite the learner's approach and originate action suggestions only when contextually requested; guidance within a chosen emotional-support branch does not authorize homework actions.
 
 Preserve factual source, speaker and certainty. A suggestion, an accepted plan, an action actually performed and reported benefit are different facts. Silence, answering another question or asking for a page does not choose earlier suggestions. Conditional resources/actions stay conditional; unsupported claims are omitted, kept uncertain or clarified only when today's decision depends on them. Scripts check structure and preservation, not conversational truth; a self-authored “confirmed” label is not evidence. Never infer absence of difficulty from a blank note or timely completion.
+
+At Coaching handoff, retain lightweight source snapshots for key result statements in internal `coaching_provenance` under the Coaching reference. Every task's Review has two fixed optional text boxes: actual process in `execution_process`, followed by open task-specific notes in `task_note`. The day-level Diary remains overall and open, not a substitute for each task's notes. Preserve original answers separately; do not require repeated content or a lesson for every task. No Coaching does not prove a method was planned, and an unreported method is unknown. Review's required completion, duration, and expectation inputs are unchanged.
 
 Derive planned times only from known constraints and agreed durations, as estimates. Actual task time comes from the learner. Without learner-reported or activity-specific timing, chat gaps, model/tool waits and file timestamps cannot establish emotional-support duration, lateness or simulated event times. Unknown times remain unknown; do not frame support as wasted study time.
 

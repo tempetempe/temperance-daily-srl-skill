@@ -46,6 +46,9 @@ VISUAL_BY_CONFIDENCE = {
 }
 COMPLETION_VALUES = {"", "completed", "partial", "not_completed", "changed"}
 EXPECTATION_VALUES = {"", "better", "as_expected", "below_expected"}
+COACHING_ORIGINS = {
+    "learner_initiated", "learner_after_prompt", "agent_suggested", "joint", "unknown",
+}
 TASK_ID_PATTERN = re.compile(r"^task-(\d{8})-(\d{3,})$")
 
 
@@ -156,6 +159,37 @@ def require_text_list(value: Any, field: str) -> list[str]:
     result: list[str] = []
     for index, item in enumerate(value):
         result.append(require_string(item, f"{field}[{index}]"))
+    return result
+
+
+def validate_coaching_provenance(value: Any, field: str) -> list[dict[str, Any]]:
+    """Validate source snapshots without rewriting their wording or inferring truth."""
+    if not isinstance(value, list):
+        raise ValueError(f"{field} must be an array")
+    result: list[dict[str, Any]] = []
+    for index, item in enumerate(value):
+        prefix = f"{field}[{index}]"
+        if not isinstance(item, dict) or set(item) != {"statement", "origin", "evidence"}:
+            raise ValueError(f"{prefix} must contain exactly statement, origin and evidence")
+        statement = item["statement"]
+        require_string(statement, f"{prefix}.statement")
+        origin = item["origin"]
+        if not isinstance(origin, str) or origin not in COACHING_ORIGINS:
+            raise ValueError(f"{prefix}.origin is invalid")
+        evidence = item["evidence"]
+        if not isinstance(evidence, list):
+            raise ValueError(f"{prefix}.evidence must be an array")
+        for evidence_index, words in enumerate(evidence):
+            require_string(words, f"{prefix}.evidence[{evidence_index}]")
+            labelled = re.split(r"[:：]", words, maxsplit=1)
+            if (len(labelled) != 2 or not labelled[0].strip() or not labelled[1].strip()
+                    or "\n" in labelled[0] or "\r" in labelled[0]):
+                raise ValueError(
+                    f"{prefix}.evidence[{evidence_index}] must use speaker: quotation"
+                )
+        if origin != "unknown" and not evidence:
+            raise ValueError(f"{prefix}.evidence must not be empty when origin is known")
+        result.append({"statement": statement, "origin": origin, "evidence": list(evidence)})
     return result
 
 
@@ -277,6 +311,8 @@ def validate_daily_page_state(
         expectation = review.get("expectation")
         if expectation not in EXPECTATION_VALUES:
             raise ValueError(f"{prefix}.review.expectation is invalid")
+        task_note = review.get("task_note")
+        require_string(task_note, f"{prefix}.review.task_note", allow_empty=True)
         normalized_review = {
             "completion": completion,
             "completion_details": require_string(
@@ -286,10 +322,14 @@ def validate_daily_page_state(
             ),
             "actual_duration_minutes": actual_duration,
             "expectation": expectation,
-            "task_note": require_string(
-                review.get("task_note"), f"{prefix}.review.task_note", allow_empty=True
-            ),
+            # Learner-authored free text is evidence, including its whitespace.
+            "task_note": task_note,
         }
+        if "execution_process" in review:
+            require_string(
+                review["execution_process"], f"{prefix}.review.execution_process", allow_empty=True
+            )
+            normalized_review["execution_process"] = review["execution_process"]
         tasks.append(
             {
                 "task_id": task_id,
@@ -300,6 +340,10 @@ def validate_daily_page_state(
                 "review": normalized_review,
             }
         )
+        if "coaching_provenance" in raw_task:
+            tasks[-1]["coaching_provenance"] = validate_coaching_provenance(
+                raw_task["coaching_provenance"], f"{prefix}.coaching_provenance"
+            )
 
     result = {
         "schema_version": 2,
@@ -324,6 +368,21 @@ def validate_daily_page_state(
                 raise ValueError(f"tasks[{index}].source_confidence cannot change")
             if task["visual_state"] != original["visual_state"]:
                 raise ValueError(f"tasks[{index}].visual_state cannot change")
+            # A client that predates the separate text boxes may omit the
+            # process answer. Omission must not erase an already saved answer.
+            if ("execution_process" not in task["review"]
+                    and "execution_process" in original["review"]):
+                task["review"]["execution_process"] = original["review"]["execution_process"]
+            # The browser edits plans and Review, never the saved Coaching
+            # evidence. Older clients omit this metadata; preserve it verbatim.
+            if "coaching_provenance" in task:
+                if ("coaching_provenance" not in original
+                        or task["coaching_provenance"] != original["coaching_provenance"]):
+                    raise ValueError(f"tasks[{index}].coaching_provenance cannot change")
+            if "coaching_provenance" in original:
+                task["coaching_provenance"] = validate_coaching_provenance(
+                    original["coaching_provenance"], f"tasks[{index}].coaching_provenance"
+                )
     review_saved_at = payload.get("review_saved_at")
     if review_saved_at is not None:
         if not isinstance(review_saved_at, str) or not review_saved_at.strip():
@@ -435,7 +494,10 @@ class DailySRLHandler(SimpleHTTPRequestHandler):
                     "runtime_dir": str(self.runtime_dir),
                     "process_token": self.process_token,
                     "pid": os.getpid(),
-                    "capabilities": ["explicit-review-save-v1", "recoverable-save-v2"],
+                    "capabilities": [
+                        "explicit-review-save-v1", "recoverable-save-v2", "coaching-provenance-v1",
+                        "separate-review-notes-v1",
+                    ],
                     "runtime_pairs": pairs,
                     "state_valid": state_validity,
                 },

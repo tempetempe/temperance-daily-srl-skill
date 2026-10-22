@@ -15,7 +15,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from bridge_readiness import DEFAULT_PORT, ensure_bridge, recover_runtime
+from bridge_readiness import DEFAULT_PORT, ensure_bridge, recover_runtime, require_compatible_bridge
 from generate_assessment import generate as generate_assessment, load_prefill_file, parse_date
 from generate_daily_page import generate as generate_daily_page
 from persistence_bridge import validate_assessment_state, validate_daily_page_state
@@ -48,6 +48,7 @@ def prepare_page(
     requested_date = parse_date(assessment_date or date.today().isoformat())
     prefill = [] if prefill is None else prefill
     paths = ensure_workspace(workspace)
+    require_compatible_bridge(paths.workspace)
     statuses = recover_runtime(paths.workspace)
     assessment_path = paths.runtime / "assessment-state.json"
     daily_path = paths.runtime / "daily-page-state.json"

@@ -15,12 +15,18 @@ sys.dont_write_bytecode = True
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from persistence_bridge import validate_assessment_state, validate_daily_page_state
+from persistence_bridge import (
+    validate_assessment_state,
+    validate_coaching_provenance,
+    validate_daily_page_state,
+)
+from bridge_readiness import require_compatible_bridge
 from workspace_runtime import (
     WorkspaceRuntimeError,
     atomic_write_text,
     ensure_workspace,
     inspect_pair,
+    read_workspace_marker,
     recover_pair,
     render_html as render_runtime_html,
     write_runtime_pair,
@@ -141,7 +147,9 @@ def build_state(assessment: Any, coaching_handoff: Any) -> dict[str, Any]:
         if handoff is not None and not isinstance(handoff, dict):
             raise ValueError(f"Coaching handoff for {task_id} must be an object")
         if handoff is not None:
-            unknown_handoff_fields = set(handoff) - {"coaching_result", "final_plan"}
+            unknown_handoff_fields = set(handoff) - {
+                "coaching_result", "coaching_provenance", "final_plan",
+            }
             if unknown_handoff_fields:
                 raise ValueError(
                     f"Coaching handoff for {task_id} has unsupported fields: {sorted(unknown_handoff_fields)}"
@@ -167,10 +175,24 @@ def build_state(assessment: Any, coaching_handoff: Any) -> dict[str, Any]:
                     "completion_details": "",
                     "actual_duration_minutes": None,
                     "expectation": "",
+                    "execution_process": "",
                     "task_note": "",
                 },
             }
         )
+        if handoff is not None and "coaching_provenance" in handoff:
+            provenance = validate_coaching_provenance(
+                handoff["coaching_provenance"], f"{task_id}.coaching_provenance"
+            )
+            statements = {
+                text for values in (coaching_result or {}).values() for text in values
+            }
+            for entry in provenance:
+                if entry["statement"] not in statements:
+                    raise ValueError(
+                        f"{task_id}.coaching_provenance.statement must match a Coaching result item"
+                    )
+            tasks[-1]["coaching_provenance"] = provenance
 
     return {
         "schema_version": 2,
@@ -189,6 +211,7 @@ def render_html(state: dict[str, Any]) -> str:
 def refresh_html(workspace: Path) -> Path:
     """Refresh only the runtime HTML while preserving the authoritative page state."""
     paths = ensure_workspace(workspace)
+    require_compatible_bridge(paths.workspace)
     recovered = recover_pair(
         paths.workspace,
         "daily-page",
@@ -198,7 +221,10 @@ def refresh_html(workspace: Path) -> Path:
         raise FileNotFoundError("Daily Page Runtime does not exist")
     state = recovered["state"]
     html_path = paths.runtime / "daily-page.html"
-    atomic_write_text(html_path, render_html(state))
+    atomic_write_text(html_path, render_runtime_html(
+        "daily-page", state,
+        workspace_id=read_workspace_marker(paths.workspace)["workspace_id"],
+    ))
     return html_path
 
 
@@ -209,6 +235,7 @@ def generate(
 ) -> tuple[Path, Path]:
     paths = ensure_workspace(workspace)
     workspace = paths.workspace
+    require_compatible_bridge(workspace)
     assessment_recovery = recover_pair(
         workspace,
         "assessment",

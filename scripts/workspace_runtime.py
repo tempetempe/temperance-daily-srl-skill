@@ -28,6 +28,7 @@ LAYOUT_VERSION = 2
 RUNTIME_VERSION = 1
 WORKSPACE_TYPE = "daily-srl"
 RUNTIME_MANIFEST_NAME = "runtime-manifest.json"
+DAILY_PAGE_VIEW = "process-and-task-note-v1"
 
 
 class WorkspaceRuntimeError(RuntimeError):
@@ -637,7 +638,13 @@ def read_manifest(workspace: Path, *, allow_missing: bool = True) -> dict[str, A
 def page_context(kind: str, state: dict[str, Any], workspace_id: str) -> dict[str, str]:
     """Stable per-generation identity; operational metadata never enters State."""
     flow_date = str(state.get(PAIR_SPECS[kind]["date_field"], ""))
-    identity = json.dumps([workspace_id, kind, flow_date, state.get("generated_at")],
+    identity_parts = [workspace_id, kind, flow_date, state.get("generated_at")]
+    if kind == "daily-page":
+        # The same saved State can be shown by incompatible Review forms.
+        # Reject an already-open old form rather than accepting its new meaning
+        # for task_note under the unchanged full-state save protocol.
+        identity_parts.append(DAILY_PAGE_VIEW)
+    identity = json.dumps(identity_parts,
                           ensure_ascii=False, separators=(",", ":"))
     return {"workspace_id": workspace_id, "kind": kind, "date": flow_date,
             "runtime_id": hashlib.sha256(identity.encode("utf-8")).hexdigest()}
@@ -728,7 +735,8 @@ def refresh_page_client(workspace: Path, kind: str, state: dict[str, Any]) -> bo
     """
     _, html_path = pair_paths(workspace, kind)
     current = html_path.read_text(encoding="utf-8")
-    if 'data-daily-srl-client="2"' in current:
+    if ('data-daily-srl-client="2"' in current and (
+            kind != "daily-page" or f'data-daily-srl-view="{DAILY_PAGE_VIEW}"' in current)):
         return False
     marker = read_workspace_marker(workspace)
     atomic_write_text(html_path, render_html(kind, state, workspace_id=marker["workspace_id"]))

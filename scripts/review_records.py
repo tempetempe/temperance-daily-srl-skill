@@ -266,6 +266,10 @@ def inspect_review(workspace: Path) -> dict[str, Any]:
             "review": {"expectation": review["expectation"]},
             "task_note": review["task_note"],
         })
+        if "coaching_provenance" in task:
+            facts[-1]["coaching_provenance"] = task["coaching_provenance"]
+        if "execution_process" in review:
+            facts[-1]["execution_process"] = review["execution_process"]
     result["facts"] = {"record_date": daily["page_date"], "tasks": facts,
                        "daily_diary": raw["daily_page"]["daily_diary"]}
     result["ready"] = not result["missing"]
@@ -302,6 +306,10 @@ def build_checkpoint(
                 "task_note": review["task_note"],
             }
         )
+        if "coaching_provenance" in daily_task:
+            tasks[-1]["coaching_provenance"] = daily_task["coaching_provenance"]
+        if "execution_process" in review:
+            tasks[-1]["execution_process"] = review["execution_process"]
     return {
         "schema_version": STRUCTURED_SCHEMA_VERSION,
         "record_date": daily["page_date"],
@@ -409,10 +417,17 @@ def render_learning_record(record: dict[str, Any]) -> str:
             [
                 "### 复盘",
                 f"- 与原先预期相比：{EXPECTATION_LABELS[review['expectation']]}",
-                "#### 关于这个任务，还有什么想记下来的？",
-                quote_text(task["task_note"]),
             ]
         )
+        if "execution_process" in task:
+            parts.extend([
+                "#### 实际做这项任务时，你是怎么做的？和原来想的有什么不同吗？",
+                quote_text(task["execution_process"]),
+            ])
+        parts.extend([
+            "#### 关于这个任务，还有什么想记下来的？",
+            quote_text(task["task_note"]),
+        ])
     parts.extend(
         [
             "## 今日小记",

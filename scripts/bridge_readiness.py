@@ -35,7 +35,10 @@ from workspace_runtime import (
 
 
 DEFAULT_PORT = 8977
-REQUIRED_CAPABILITIES = {"explicit-review-save-v1", "recoverable-save-v2"}
+REQUIRED_CAPABILITIES = {
+    "explicit-review-save-v1", "recoverable-save-v2", "coaching-provenance-v1",
+    "separate-review-notes-v1",
+}
 
 
 def _valid_port(value: Any) -> bool:
@@ -184,7 +187,8 @@ def recover_runtime(workspace: Path) -> dict[str, str]:
     return result
 
 
-def _existing_bridge(workspace: Path, page: str) -> dict[str, Any] | None:
+def _workspace_bridges(workspace: Path) -> list[tuple[int, dict[str, Any]]]:
+    """Discover only services whose live identity matches this workspace."""
     paths = ensure_workspace(workspace)
     marker = read_workspace_marker(paths.workspace)
     metadata = _read_json(paths.bridge_metadata)
@@ -196,19 +200,40 @@ def _existing_bridge(workspace: Path, page: str) -> dict[str, Any] | None:
         candidates.append(metadata["port"])
     if DEFAULT_PORT not in candidates:
         candidates.append(DEFAULT_PORT)
+    matches = []
     for port in candidates:
         health = health_at(port)
-        if _matches_workspace(health, paths.workspace, marker["workspace_id"]) and not (
-            REQUIRED_CAPABILITIES.issubset(health.get("capabilities", []))
-        ):
+        if _matches_workspace(health, paths.workspace, marker["workspace_id"]):
+            matches.append((port, health))
+    return matches
+
+
+def _require_bridge_capabilities(bridges: list[tuple[int, dict[str, Any]]]) -> None:
+    for _, health in bridges:
+        if not REQUIRED_CAPABILITIES.issubset(health.get("capabilities", [])):
             raise WorkspaceRuntimeError(
-                "The workspace Bridge predates the required recoverable-save protocol. "
+                "The workspace Bridge lacks required save/source-preservation capabilities. "
                 "Preserve saved State; an authorized maintenance session must stop "
                 "the old Bridge with the formal stop helper before retrying ensure."
             )
-        if _matches_workspace(health, paths.workspace, marker["workspace_id"]) and _page_health(
-            port, page, health
-        ):
+
+
+def require_compatible_bridge(workspace: Path) -> None:
+    """Reject an identified older service before changing local page contents.
+
+    This check never starts or stops a process and needs no generated page.
+    Foreign services are not ours to stop or assess as a workspace upgrade.
+    """
+    _require_bridge_capabilities(_workspace_bridges(workspace))
+
+
+def _existing_bridge(workspace: Path, page: str) -> dict[str, Any] | None:
+    paths = ensure_workspace(workspace)
+    marker = read_workspace_marker(paths.workspace)
+    bridges = _workspace_bridges(paths.workspace)
+    _require_bridge_capabilities(bridges)
+    for port, health in bridges:
+        if _page_health(port, page, health):
             return {
                 "status": "reused",
                 "pid": health.get("pid"),
