@@ -113,8 +113,6 @@ git clone --branch v7.1 --depth 1 https://github.com/tempetempe/temperance-daily
 
 当前正式版本：**7.1**，更新发布于 2026-10-22。
 
-本版将每项任务的实际过程与任务备注分开保存，并在后台保留讨论中关键判断和行动的来源。保留页面保存保护、本地归档及团队空间同步。
-
 ## 许可
 
 本项目采用 [PolyForm Noncommercial License 1.0.0](LICENSE)。
