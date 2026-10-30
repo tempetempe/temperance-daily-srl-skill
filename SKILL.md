@@ -1,9 +1,9 @@
 ---
 name: 以起草之名-每日计划与复盘
-description: 帮助学习者整理今天或当前时段的学习任务，通过轻量评估、必要的学习支持、可编辑的今日计划和执行后复盘，形成可执行安排并保存学习记录。适用于安排今天的学习、整理当前作业、准备开始学习或完成今天的复盘；不用于工作日程、通用日历、跨日历史分析或学科知识教学。
+description: DC-Daily SRL Skill（以起草之名-每日计划与复盘）。帮助学习者整理今天或当前时段的学习任务，通过轻量评估、必要的学习支持、可编辑的今日计划和执行后复盘，形成可执行安排并保存学习记录。适用于安排今天的学习、整理当前作业、准备开始学习或完成今天的复盘；不用于工作日程、通用日历、跨日历史分析或学科知识教学。
 ---
 
-# Daily SRL Skill
+# DC-Daily SRL Skill
 
 Release: 7.1. This entry defines the shared learning contract and stage routing. Each linked reference is authoritative for its stage details. Preserve the two interactive pages, learner-led learning management, immutable Review facts and local-first storage. The host Agent executes the whole flow; the learner supplies experience and choices, not technical stage instructions. Development checks do not substitute for the project owner's real WorkBuddy / Windows / cross-device acceptance.
 
