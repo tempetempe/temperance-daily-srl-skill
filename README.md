@@ -1,6 +1,6 @@
 # 以起草之名｜每日学习计划与复盘 Skill
 
-英文名称：**DC-Daily SRL Skill**。
+英文名称：**DC-Daily SRL Skill**
 
 ![Version](https://img.shields.io/badge/version-7.1-2F6F5E?style=flat-square)
 ![Skill](https://img.shields.io/badge/Skill-Agent-111111?style=flat-square)
