@@ -98,7 +98,7 @@
 帮我安装“以起草之名-每日计划与复盘”（DC-Daily SRL Skill）这个 Skill。请按下面步骤操作：
 
 1. 确认当前 Agent 使用的技能目录，不存在就创建。
-2. 从 https://github.com/tempetempe/temperance-daily-srl-skill 获取完整仓库，安装到技能目录下的 daily-srl-skill 文件夹。
+2. 从 https://github.com/tempetempe/temperance-daily-srl-skill 获取完整仓库，安装到技能目录下的 dc-daily-srl-skill 文件夹。
 3. 验证文件夹内包含 SKILL.md、scripts/、templates/、references/，并保留 SKILL.md 中的原有中文名称。
 4. 按当前 Agent 支持的方式加载技能，告诉我实际安装结果。之后我在新对话里说“我想整理和安排一下今天的学习任务”，就使用这个 Skill 开始当天流程。
 ```
@@ -108,7 +108,7 @@
 在支持 `.agents/skills/` 的 Agent 项目目录中运行：
 
 ```sh
-git clone --branch v7.1-name-update --depth 1 https://github.com/tempetempe/temperance-daily-srl-skill.git .agents/skills/daily-srl-skill
+git clone --branch v7.1-name-update --depth 1 https://github.com/tempetempe/temperance-daily-srl-skill.git .agents/skills/dc-daily-srl-skill
 ```
 
 ## 当前版本
