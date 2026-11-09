@@ -1,6 +1,6 @@
 # 以起草之名｜每日学习计划与复盘 Skill
 
-英文名称：**DC-Daily SRL Skill**
+Name：**DC-Daily SRL Skill**
 
 ![Version](https://img.shields.io/badge/version-7.1-2F6F5E?style=flat-square)
 ![Skill](https://img.shields.io/badge/Skill-Agent-111111?style=flat-square)
@@ -21,7 +21,7 @@
 | **充分引导而不替代** | Agent 会一步步帮助你识别困难、考虑资源和形成办法；学习者始终可以补充、纠正、拒绝或调整。 |
 
 > [!IMPORTANT]
-> **如果你对“如何系统地提升学习能力”感兴趣，可以关注公众号「以起草之名」，了解基于“每日计划与复盘（DC-Daily SRL Skill）”设计的「学习力发展计划」。**
+> **如果你对“如何系统地提升学习能力”感兴趣，可以关注公众号「以起草之名」，了解基于“每日计划与复盘Skill”设计的「学习力发展计划」。**
 
 ## 页面效果
 
