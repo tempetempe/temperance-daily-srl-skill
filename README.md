@@ -3,7 +3,6 @@
 Name：**DC-Daily SRL Skill**
 
 ![Version](https://img.shields.io/badge/version-7.1.0-2F6F5E?style=flat-square)
-![Skill](https://img.shields.io/badge/Skill-Agent-111111?style=flat-square)
 ![AI 学习管理工具](https://img.shields.io/badge/AI-%E5%AD%A6%E4%B9%A0%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7-2F6F5E?style=flat-square)
 ![Local-first](https://img.shields.io/badge/data-Local--first-40695B?style=flat-square)
 ![Language](https://img.shields.io/badge/language-中文-D99A2B?style=flat-square)
