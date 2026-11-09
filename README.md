@@ -113,7 +113,7 @@ git clone --branch v7.1-name-update --depth 1 https://github.com/tempetempe/temp
 
 ## 当前版本
 
-当前正式版本：**7.1**，发布于 2026-10-22。
+当前正式版本：**7.1.0**，发布于 2026-10-22。
 
 ## 许可
 
