@@ -20,6 +20,7 @@ import sys
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+# Retain the legacy evidence profile identifier for previously registered jobs.
 PROFILE = "workbuddy-library-v0.6"
 LIGHT_PROFILE = "workbuddy-library-light-v1"
 MAX_PAGES = 1000
@@ -32,10 +33,15 @@ CAPABILITY_SCRIPTS = {"list_spaces": "space_api.py", "lookup_files": "space_api.
                       "create_file": "drive/upload_drive_file.py",
                       "read_document": "doc/get_doc_reviews.py",
                       "download_file": "drive/get_download_link.py"}
+WRITE_SCRIPTS = {"doc": "doc/create_doc.py", "drive": "drive/upload_drive_file.py"}
 
 
 class LibraryError(ValueError):
     """Safe failure text: never includes native responses, URLs or credentials."""
+
+    def __init__(self, message, *, stage=None):
+        super().__init__(message)
+        self.stage = stage
 
 
 def text_id(value, label):
@@ -45,11 +51,12 @@ def text_id(value, label):
 
 
 def validate_library_dir(library_dir):
-    """Validate only the explicit path supplied by the host, without scanning."""
+    """Identify the official entry at the host's explicit path."""
     root = Path(library_dir).expanduser().resolve()
     manifest = root / "SKILL.md"
     api = root / "space_api.py"
-    if not root.is_dir() or not manifest.is_file() or not api.is_file():
+    if (not root.is_dir() or not manifest.is_file() or not api.is_file()
+            or not manifest.resolve().is_relative_to(root) or not api.resolve().is_relative_to(root)):
         raise LibraryError("the supplied official library directory is incomplete")
     try:
         raw = manifest.read_text(encoding="utf-8")
@@ -58,9 +65,6 @@ def validate_library_dir(library_dir):
     header = re.match(r"\A---\s*\r?\n(.*?)\r?\n---(?:\s*\r?\n|\Z)", raw, re.S)
     if not header or not re.search(r"(?m)^name:\s*['\"]?library['\"]?\s*$", header[1]):
         raise LibraryError("the supplied skill is not named library")
-    version = re.search(r"(?m)^version:\s*['\"]?([^\s'\"]+)['\"]?\s*$", header[1])
-    if not version or not re.fullmatch(r"0\.6\.[0-9]+", version[1]):
-        raise LibraryError("this adapter requires the documented library 0.6 contract")
     return root
 
 
@@ -220,16 +224,20 @@ class LibraryClient:
             spaces.append(dict(id=text_id(row.get("spaceId"), "spaceId"),
                                name=title,
                                category=category, role=role, can_write=can_write))
-        capabilities = [name for name, relative in CAPABILITY_SCRIPTS.items()
-                        if (self.root / relative).is_file()
-                        and (self.root / relative).resolve().is_relative_to(self.root)]
         if light:
             capabilities = ["list_spaces", "lookup_files", "inspect_file"]
-            writes = [self.root / name for name in ("drive/upload_drive_file.py", "doc/create_doc.py")]
-            if all(path.is_file() and path.resolve().is_relative_to(self.root) for path in writes):
+            for kind, relative in WRITE_SCRIPTS.items():
+                script = self.root / relative
+                if script.is_file() and script.resolve().is_relative_to(self.root):
+                    capabilities.append(f"write_{kind}")
+            if {"write_doc", "write_drive"}.issubset(capabilities):
                 capabilities += ["create_file", "update_file"]
+        else:
+            capabilities = [name for name, relative in CAPABILITY_SCRIPTS.items()
+                            if (self.root / relative).is_file()
+                            and (self.root / relative).resolve().is_relative_to(self.root)]
         return dict(schema_version=1, host="workbuddy", profile=LIGHT_PROFILE if light else PROFILE,
-                    host_evidence="official-library-skill:validated-name-and-version",
+                    host_evidence="official-library-skill:validated-entry",
                     session_id=session_id, account_id=account_id, query_ok=True, complete=True,
                     checked_at=datetime.now(timezone.utc).isoformat(),
                     capabilities=capabilities,

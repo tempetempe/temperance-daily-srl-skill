@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Execute one registered delivery through WorkBuddy's official library scripts.
 
-The host supplies its enabled ``library`` 0.6.x directory. No account discovery,
+The host supplies its enabled official ``library`` directory. No account discovery,
 credentials, replacement API or hidden fallback is used here. The delivery
 controller owns target selection, current metadata checks and write registration;
 this adapter preserves that plan and parses the actual native stdout receipt.
@@ -17,11 +17,10 @@ import sys
 
 sys.dont_write_bytecode = True
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from workbuddy_library import LibraryClient, LibraryError, text_id
+from workbuddy_library import LibraryClient, LibraryError, WRITE_SCRIPTS as SCRIPTS, text_id
 
 DRIVE_MARKER = "KS_DRIVE_UPLOAD_OK "
 DOC_MARKER = "KS_DOC_CREATE\t"
-SCRIPTS = {"drive": "drive/upload_drive_file.py", "doc": "doc/create_doc.py"}
 
 
 def run_native(argv, **kwargs):
@@ -193,18 +192,24 @@ class LibraryWriter(LibraryClient):
                      for arg in node.args if isinstance(arg, ast.Constant) and isinstance(arg.value, str)}
         constants = {node.value for node in ast.walk(tree)
                      if isinstance(node, ast.Constant) and isinstance(node.value, str)}
-        needed = ({"path", "--file-name", "--space-id", "--node-id"} if kind == "drive" else
-                  {"--content-file", "--title", "--space-id", "--node-block-id", "--confirm-overwrite"})
+        update = plan["operation"] == "update"
+        if kind == "drive":
+            needed = {"path", "--file-name", "--space-id"}
+            if update:
+                needed.add("--node-id")
+        else:
+            needed = {"--content-file", "--space-id"}
+            needed.update({"--node-block-id", "--confirm-overwrite"} if update else {"--title"})
         marker = DRIVE_MARKER if kind == "drive" else DOC_MARKER
         if not needed.issubset(arguments) or not any(marker in value for value in constants):
             raise LibraryError("enabled official script does not implement the supported write contract")
         if kind == "drive":
             argv += [str(path), "--space-id", plan["space_id"], "--file-name", plan["filename"]]
-            if plan["operation"] == "update":
+            if update:
                 argv += ["--node-id", plan["id"]]
         else:
             argv += ["--content-file", str(path), "--space-id", plan["space_id"]]
-            if plan["operation"] == "update":
+            if update:
                 # The native overwrite preserves the existing title. Do not
                 # accidentally rename a registered mirror during its update.
                 argv += ["--node-block-id", plan["id"], "--confirm-overwrite"]

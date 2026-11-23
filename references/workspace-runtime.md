@@ -24,7 +24,7 @@ Resolve authorized Workspace Root
 → continue the current Daily SRL stage
 ```
 
-Do not prepend a separate `workspace_runtime.py ensure` or follow successful combined entry with another readiness call. The lower-level commands in this reference remain for explicit recovery, migration or diagnosis. There is no learner-facing initialization flow. If the host supplies no writable root, ask the learner only to select or authorize a folder for Daily SRL records.
+Do not prepend a separate `workspace_runtime.py ensure`. WorkBuddy follows the [shared page handoff](assessment-persistence.md#workbuddy-page-handoff-assessment-and-daily-page), including a separate read-only check after the preparation invocation exits. On other hosts a successful combined entry needs only the actual page open and display check. The lower-level commands in this reference remain for recovery, migration or diagnosis. If the host supplies no writable root, ask the learner only to select or authorize a folder for Daily SRL records.
 
 `scripts/workspace_runtime.py --workspace <root> ensure` is idempotent. On an empty Workspace it creates only:
 
@@ -97,7 +97,7 @@ Run recovery through `scripts/bridge_readiness.py ... ensure` or `workspace_runt
 
 ## Bridge readiness
 
-The combined page entry invokes this existing readiness helper internally. Only use it directly for targeted recovery/diagnosis; a successful combined entry needs no second call:
+The combined page entry invokes this existing readiness helper internally. Use the `ensure` command directly for targeted diagnosis. WorkBuddy uses [`verify-page`](assessment-persistence.md#workbuddy-page-handoff-assessment-and-daily-page) for the separate handoff check:
 
 ```bash
 python3 <skill-package>/scripts/bridge_readiness.py \
@@ -117,4 +117,4 @@ The HTML uses same-origin relative `/api/...` URLs, so no fixed port or endpoint
 
 `bridge.json` and `bridge.log` are operational files under `.daily-srl/`. A stale marker is ignored when health and Workspace identity do not match. `bridge_readiness.py ... stop` terminates only the process whose token, root, and Workspace ID still match. Normal learner use does not mention or require Bridge, Python, localhost, endpoints, or ports.
 
-The implementation uses the host's Python runtime to start a loopback subprocess. If a host does not permit subprocess startup, loopback access, or page opening, readiness must stop and report that host limitation; it must never present a manually started Bridge as a successful normal learner path.
+The implementation uses the host's Python runtime to serve the page on loopback. WorkBuddy can start that Bridge through a supported persistent execution session when the current task provides one. If the host cannot sustain file access, loopback access, or page opening, preserve the local page and report the limitation.

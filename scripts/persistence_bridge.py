@@ -458,7 +458,11 @@ class DailySRLHandler(SimpleHTTPRequestHandler):
     def do_GET(self) -> None:
         path = urlsplit(self.path).path
         if path == "/save-client.js":
-            body = (SCRIPT_DIR.parent / "templates" / "save-client.js").read_bytes()
+            try:
+                body = (SCRIPT_DIR.parent / "templates" / "save-client.js").read_bytes()
+            except OSError:
+                self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "save client is unavailable"})
+                return
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/javascript; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -466,7 +470,12 @@ class DailySRLHandler(SimpleHTTPRequestHandler):
             self.wfile.write(body)
             return
         if path == "/health":
-            pairs = runtime_summary(self.workspace_root)
+            try:
+                pairs = runtime_summary(self.workspace_root)
+            except (OSError, WorkspaceRuntimeError):
+                # The process can remain alive after the host revokes file access.
+                # Keep the recorded identity available for scoped recovery.
+                pairs = {"assessment": "unavailable", "daily-page": "unavailable"}
             state_validity: dict[str, bool | None] = {
                 "assessment": None,
                 "daily-page": None,
@@ -508,7 +517,9 @@ class DailySRLHandler(SimpleHTTPRequestHandler):
                 state = self.read_assessment_state()
             except FileNotFoundError:
                 self.send_json(HTTPStatus.NOT_FOUND, {"error": "assessment state does not exist"})
-            except (json.JSONDecodeError, ValueError, OSError) as error:
+            except OSError:
+                self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "assessment state could not be read"})
+            except ValueError as error:
                 self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"invalid state on disk: {error}"})
             else:
                 self.send_json(HTTPStatus.OK, state, headers=self.state_headers("assessment", state))
@@ -518,7 +529,9 @@ class DailySRLHandler(SimpleHTTPRequestHandler):
                 state = self.read_daily_page_state()
             except FileNotFoundError:
                 self.send_json(HTTPStatus.NOT_FOUND, {"error": "daily page state does not exist"})
-            except (json.JSONDecodeError, ValueError, OSError) as error:
+            except OSError:
+                self.send_json(HTTPStatus.SERVICE_UNAVAILABLE, {"error": "daily page state could not be read"})
+            except ValueError as error:
                 self.send_json(HTTPStatus.INTERNAL_SERVER_ERROR, {"error": f"invalid state on disk: {error}"})
             else:
                 self.send_json(HTTPStatus.OK, state, headers=self.state_headers("daily-page", state))

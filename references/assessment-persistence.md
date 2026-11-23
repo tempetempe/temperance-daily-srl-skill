@@ -57,9 +57,24 @@ It ensures the two long-term record directories exist but never edits their cont
 
 ## Make the page ready
 
-`page_flow.py` performs workspace readiness, generation or safe recovery, and Bridge checks internally. Do not prepend separate ensure/generate/readiness calls on a normal successful path. A `status=ready` result includes `operation=generated|resumed`, `flow_date`, validated task/path information, `page_url` and `page_opened=false`. The host must actually open that URL for the learner; a printed URL is not delivery.
+`page_flow.py` performs workspace readiness, generation or safe recovery, and initial Bridge checks internally. Other hosts use the default entry. Its `status=ready` result includes `operation=generated|resumed`, `flow_date`, validated task/path information, `page_url` and `page_opened=false`. The host must actually open that URL and verify the page content.
 
-If readiness fails after content is installed, `status=page_not_ready` and `local_content_ready=true` identify preserved local content. Retrying the combined entry resumes it and retries readiness without regenerating learner data. Invalid/conflicting artifacts stop safely. Standalone `bridge_readiness.py ... ensure --page assessment` remains for recovery/diagnosis, not an automatic extra pass after success. Bridge startup and ports are internal; never ask the learner to run a server. Direct `persistence_bridge.py` invocation is for diagnostics or the scoped host-supported persistent-session fallback below; it is not an extra normal step.
+### WorkBuddy page handoff (Assessment and Daily Page)
+
+1. Append `--bridge-mode workbuddy-persistent` to the normal page command when the current WorkBuddy task exposes a supported persistent terminal or execution session the Agent can use. Otherwise append `--bridge-mode workbuddy-detached`. Both modes return the prepared page's `flow_date` and `runtime_id`; a healthy Bridge may be reused.
+2. For `needs_persistent_bridge`, run the returned `persistent_session.argv` in the supported session using its `env` values as additions to that session's authorized environment. Keep the foreground process running there. For `page_check_required`, the initial Bridge check has already run in the preparation command.
+3. After the preparation command exits and any persistent launch reports startup, run the read-only handoff check in a **separate** execution invocation:
+
+```bash
+python3 <skill-package>/scripts/bridge_readiness.py --workspace <workspace-root> \
+  verify-page --page assessment --date <flow_date> --runtime-id <runtime_id>
+```
+
+For Daily Page use `--page daily-page`. The check confirms the recorded process identity and tests the exact page generation, live State and shared save client. Use only its successful `page_url` for the handoff. Open it through the available WorkBuddy browser capability and verify the actual page displays the expected tasks. Wait for live State loading to finish successfully (for example, “已读取保存的内容。” or a successful draft restoration message). The page can display embedded task names while its live State is still loading or has failed. No periodic checks are needed.
+
+If preparation returns `page_not_ready` with `local_content_ready=true`, or the subsequent check or browser open fails, preserve the current page inputs before closing or refreshing. Retry the same page and date once with `--recover-bridge <runtime_id>` from the original preparation result, preferring the supported persistent session if it is available. The retry resumes the original generation when it is still present, and can stop only the identified unhealthy Bridge for this workspace. It attempts to preserve the original port and reports when a different browser origin is required. Verify in a separate invocation again, then check the actual opened page. If the host cannot provide a working handoff, explain that the local page data is preserved and page saving is unavailable. Bridge startup and ports are internal; the learner does not have to run a server.
+
+Standalone `bridge_readiness.py ... ensure --page assessment` remains available for targeted diagnosis. Invalid/conflicting Runtime stops safely.
 
 Endpoints:
 
@@ -100,4 +115,4 @@ Waiting has a learner-accessible cancel/recovery action, without a fixed request
 
 The Agent should use existing formal readiness/status/stop helpers to recover the same workspace, preferably retaining its port. If the verified service is older than `recoverable-save-v2`, preserve inputs, stop only that identified service with `bridge_readiness.py --workspace <root> stop`, then retry the normal `page_flow.py` entry. The entry refreshes an old page client from validated disk State without rewriting State or records. Do not reopen an old browser tab and assume its code was upgraded.
 
-Both Windows and Mac have platform-specific startup options. Success only establishes initial readiness, not immunity from host process cleanup. If cleanup recurs, use `persistent_session_fallback` supplied with launch failure, or run the existing `persistence_bridge.py --workspace <root> --port <prior-port> --ready-file <root>/.daily-srl/bridge.json --process-token <new-random-token>` in the host's officially supported persistent terminal (argv/env are internal, not learner instructions). Confirm through the existing readiness helper before returning to the preserved page. Do not invent a host API, bypass Job policy, elevate, install a system daemon, or loop restarts. If no supported persistent execution exists, preserve drafts and explain the limited save availability rather than promise permanence.
+Both Windows and Mac have platform-specific startup options. Startup checks establish initial readiness. WorkBuddy recovery follows the [page handoff above](#workbuddy-page-handoff-assessment-and-daily-page), including cases where the process remains alive but loses access to workspace files. Use the host's authorized execution environment for persistent launch and preserve browser drafts before retrying. Do not invent a host API, bypass Job policy, elevate, install a system daemon, or loop restarts. If the host cannot sustain access, preserve drafts and explain the limited save availability.

@@ -143,7 +143,7 @@ def ready_status(context):
         return "permission_unknown"
     capabilities = set(context["capabilities"])
     if context.get("profile") == "workbuddy-library-light-v1":
-        return "capability_missing" if (REQUIRED | {"inspect_file"}) - capabilities else "ready"
+        return "capability_missing" if {"lookup_files", "inspect_file"} - capabilities else "ready"
     if REQUIRED - capabilities or not capabilities.intersection({"read_file", "download_file"}):
         return "capability_missing"
     if context.get("profile") == "workbuddy-library-v0.6" and "read_document" not in capabilities:

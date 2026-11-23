@@ -285,6 +285,13 @@ def inspect(workspace, token, job_id, evidence):
         return dict(job_id=job_id, status=job["status"], actions=actions)
 
 
+def require_write_capability(context, kind, operation):
+    capabilities = context["capabilities"]
+    legacy_capability = f"{operation}_file"
+    if f"write_{NODE_KINDS[kind]}" not in capabilities and legacy_capability not in capabilities:
+        raise ValueError(f"{legacy_capability} capability is required for the {kind} artifact")
+
+
 def begin_transfer(workspace, token, job_id, kind):
     if kind not in KINDS:
         raise ValueError("unknown artifact kind")
@@ -312,8 +319,7 @@ def begin_transfer(workspace, token, job_id, kind):
             if artifact["state"] not in ("create_ready", "update_ready") or artifact.get("observed_token") != token:
                 raise ValueError("fresh complete directory evidence must authorize this write")
             operation = "create" if artifact["state"] == "create_ready" else "update"
-            if operation == "update" and "update_file" not in context["capabilities"]:
-                raise ValueError("update_file capability is required to replace a registered mirror")
+            require_write_capability(context, kind, operation)
             action_id = uuid.uuid4().hex
             artifact.update(state="uploading", action_id=action_id, operation=operation)
             persist(folder, job, token)

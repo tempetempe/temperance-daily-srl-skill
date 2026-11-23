@@ -14,6 +14,7 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from http.client import HTTPException
 from pathlib import Path
 from typing import Any
 
@@ -25,12 +26,15 @@ if str(SCRIPT_DIR) not in sys.path:
 
 from persistence_bridge import validate_assessment_state, validate_daily_page_state
 from workspace_runtime import (
+    PAIR_SPECS,
     WorkspaceRuntimeError,
     ensure_directory,
     ensure_workspace,
     inspect_pair,
+    page_context,
     read_workspace_marker,
     recover_pair,
+    workspace_paths,
 )
 
 
@@ -83,7 +87,7 @@ def _launch_options(platform: str | None = None) -> tuple[str, dict[str, Any]]:
 
 
 def _persistent_session_fallback(workspace: Path, port: int) -> dict[str, Any]:
-    paths = ensure_workspace(workspace)
+    paths = workspace_paths(workspace)
     return {
         "mode": "host-supported-persistent-terminal",
         "argv": [
@@ -95,7 +99,7 @@ def _persistent_session_fallback(workspace: Path, port: int) -> dict[str, Any]:
         "env": {"PYTHONIOENCODING": "utf-8", "PYTHONDONTWRITEBYTECODE": "1"},
         "instruction": (
             "The Agent may run this foreground command in a host-supported persistent "
-            "terminal, then use ensure to verify it. Keep the terminal alive. Do not "
+            "terminal, then verify readiness in a separate invocation. Keep the terminal alive. Do not "
             "claim guaranteed lifetime or bypass host process cleanup. Preserve the "
             "open page and its draft before changing the page URL."
         ),
@@ -160,6 +164,85 @@ def _page_health(port: int, page: str, health: dict[str, Any]) -> bool:
             return response.status == 200
     except (OSError, urllib.error.URLError):
         return False
+
+
+def _check_page_endpoints(port: int, page: str, expected_context: dict[str, str]) -> str | None:
+    """Verify the prepared runtime, writable save client handoff, and State endpoint."""
+    base = f"http://127.0.0.1:{port}"
+    state_endpoint = f"/api/{page}-state"
+    endpoint = f"/{page}.html"
+    try:
+        with urllib.request.urlopen(base + endpoint, timeout=0.7) as response:
+            html = response.read().decode("utf-8")
+        _, tag, body = html.partition('<script id="save-context" type="application/json">')
+        content, end, _ = body.partition("</script>")
+        if (not tag or not end or json.loads(content) != expected_context
+                or 'src="save-client.js"' not in html):
+            return "served page does not match the prepared page generation"
+        endpoint = state_endpoint
+        with urllib.request.urlopen(base + endpoint, timeout=0.7) as response:
+            state = json.load(response)
+            runtime_id = response.headers.get("X-Daily-SRL-Context")
+            if not response.headers.get("ETag"):
+                return "served State is missing its save revision"
+        validator = validate_assessment_state if page == "assessment" else validate_daily_page_state
+        state = validator(state, mark_saved=False)
+        if (runtime_id != expected_context["runtime_id"]
+                or page_context(page, state, expected_context["workspace_id"]) != expected_context):
+            return "served State does not match the prepared page generation"
+        endpoint = "/save-client.js"
+        with urllib.request.urlopen(base + endpoint, timeout=0.7) as response:
+            client = response.read()
+        if client != (SCRIPT_DIR.parent / "templates" / "save-client.js").read_bytes():
+            return "served save client differs from the installed save client"
+    except urllib.error.HTTPError as error:
+        return f"{endpoint} returned HTTP {error.code}"
+    except (OSError, ValueError, HTTPException):
+        return f"{endpoint} could not be read or validated"
+    return None
+
+
+def _matches_recorded_process(
+    metadata: dict[str, Any] | None, health: dict[str, Any] | None,
+    workspace: Path, workspace_id: str,
+) -> bool:
+    if not _metadata_for_workspace(metadata, workspace, workspace_id):
+        return False
+    token, pid = metadata.get("process_token"), metadata.get("pid")
+    return (
+        isinstance(token, str) and bool(token) and type(pid) is int and pid > 0
+        and _matches_workspace(health, workspace, workspace_id, process_token=token)
+        and health.get("pid") == pid
+    )
+
+
+def verify_page(
+    workspace: Path, *, page: str, flow_date: str, runtime_id: str
+) -> dict[str, Any]:
+    """Read-only WorkBuddy handoff after the page preparation command has ended."""
+    paths = workspace_paths(workspace)
+    result = {
+        "status": "page_not_ready", "page": page, "flow_date": flow_date,
+        "page_opened": False, "next_action": "preserve_draft_then_recover_bridge",
+    }
+    if page not in PAIR_SPECS:
+        raise ValueError("page must be assessment or daily-page")
+    marker = read_workspace_marker(paths.workspace)
+    metadata = _read_json(paths.bridge_metadata)
+    if not metadata or not _valid_port(metadata.get("port")):
+        return dict(result, error="prepared Bridge is missing its recorded port")
+    port = metadata["port"]
+    health = health_at(port)
+    if not _matches_recorded_process(metadata, health, paths.workspace, marker["workspace_id"]):
+        return dict(result, error="prepared Bridge is unavailable or its identity changed")
+    _require_bridge_capabilities([(port, health)])
+    expected_context = {"workspace_id": marker["workspace_id"], "kind": page, "date": flow_date,
+                        "runtime_id": runtime_id}
+    error = _check_page_endpoints(port, page, expected_context)
+    if error:
+        return dict(result, error=error)
+    return dict(result, status="ready", next_action="open_and_verify_page",
+                runtime_id=runtime_id, port=port, page_url=f"http://127.0.0.1:{port}/{page}.html")
 
 
 def _port_is_occupied(port: int) -> bool:
@@ -227,13 +310,24 @@ def require_compatible_bridge(workspace: Path) -> None:
     _require_bridge_capabilities(_workspace_bridges(workspace))
 
 
-def _existing_bridge(workspace: Path, page: str) -> dict[str, Any] | None:
+def _existing_bridge(
+    workspace: Path, page: str, *, require_recorded: bool = False,
+    expected_context: dict[str, str] | None = None,
+) -> dict[str, Any] | None:
     paths = ensure_workspace(workspace)
     marker = read_workspace_marker(paths.workspace)
     bridges = _workspace_bridges(paths.workspace)
     _require_bridge_capabilities(bridges)
+    metadata = _read_json(paths.bridge_metadata) if require_recorded else None
     for port, health in bridges:
-        if _page_health(port, page, health):
+        if require_recorded and (
+            not _matches_recorded_process(metadata, health, paths.workspace, marker["workspace_id"])
+            or metadata.get("port") != port
+        ):
+            continue
+        if _page_health(port, page, health) and (
+            expected_context is None or _check_page_endpoints(port, page, expected_context) is None
+        ):
             return {
                 "status": "reused",
                 "pid": health.get("pid"),
@@ -328,6 +422,9 @@ def ensure_bridge(
     *,
     page: str,
     default_port: int = DEFAULT_PORT,
+    persistent_session: bool = False,
+    workbuddy_context: dict[str, str] | None = None,
+    recover_unhealthy: bool = False,
 ) -> dict[str, Any]:
     if page not in {"assessment", "daily-page"}:
         raise ValueError("page must be assessment or daily-page")
@@ -338,7 +435,10 @@ def ensure_bridge(
     if statuses[page] != "ready":
         raise WorkspaceRuntimeError(f"{page} Runtime is not ready: {statuses[page]}")
 
-    existing = _existing_bridge(paths.workspace, page)
+    recovery_context = workbuddy_context if recover_unhealthy else None
+    existing = (_existing_bridge(paths.workspace, page, require_recorded=True,
+                                 expected_context=recovery_context)
+                if workbuddy_context else _existing_bridge(paths.workspace, page))
     if existing:
         return existing
 
@@ -349,14 +449,38 @@ def ensure_bridge(
             metadata, paths.workspace, marker["workspace_id"]
         ) and _valid_port(metadata.get("port")) else None
     )
+    if previous_port is not None and recovery_context:
+        health = health_at(previous_port)
+        if _matches_recorded_process(metadata, health, paths.workspace, marker["workspace_id"]):
+            if _check_page_endpoints(previous_port, page, recovery_context) is None:
+                existing = _existing_bridge(paths.workspace, page, require_recorded=True,
+                                            expected_context=recovery_context)
+                if existing:
+                    return existing
+                raise WorkspaceRuntimeError("Bridge changed during recovery; preserve the page and draft")
+            state_path = paths.runtime / PAIR_SPECS[page]["state"]
+            current = json.loads(state_path.read_text(encoding="utf-8"))
+            if page_context(page, current, marker["workspace_id"]) != recovery_context:
+                raise WorkspaceRuntimeError("Page generation changed during recovery; preserve State")
+            stopped = stop_bridge(paths.workspace, expected_process_token=metadata["process_token"])
+            if stopped["status"] != "stopped" and _port_is_occupied(previous_port):
+                raise WorkspaceRuntimeError("Bridge changed during recovery; preserve the page and draft")
     preferred_port = previous_port if previous_port is not None else default_port
     requested_port = 0 if _port_is_occupied(preferred_port) else preferred_port
-    try:
-        result = _launch_bridge(paths.workspace, page, requested_port)
-    except WorkspaceRuntimeError:
-        if requested_port == 0:
-            raise
-        result = _launch_bridge(paths.workspace, page, 0)
+    if persistent_session:
+        result = {
+            "status": "needs_persistent_bridge",
+            "port": requested_port,
+            "workspace_id": marker["workspace_id"],
+            "persistent_session": _persistent_session_fallback(paths.workspace, requested_port),
+        }
+    else:
+        try:
+            result = _launch_bridge(paths.workspace, page, requested_port)
+        except WorkspaceRuntimeError:
+            if requested_port == 0 or recover_unhealthy:
+                raise
+            result = _launch_bridge(paths.workspace, page, 0)
     result["port_changed"] = previous_port is not None and result["port"] != previous_port
     if result["port_changed"]:
         result["origin_notice"] = (
@@ -379,7 +503,7 @@ def bridge_status(workspace: Path) -> dict[str, Any]:
     return {"status": "ready", **metadata, "health": health}
 
 
-def stop_bridge(workspace: Path) -> dict[str, Any]:
+def stop_bridge(workspace: Path, *, expected_process_token: str | None = None) -> dict[str, Any]:
     paths = ensure_workspace(workspace)
     status = bridge_status(paths.workspace)
     if status["status"] != "ready":
@@ -391,6 +515,8 @@ def stop_bridge(workspace: Path) -> dict[str, Any]:
     token = status.get("process_token")
     if not isinstance(token, str) or not token:
         raise WorkspaceRuntimeError("Bridge has no process token; refusing to stop an unverified process")
+    if expected_process_token is not None and expected_process_token != token:
+        raise WorkspaceRuntimeError("Bridge process identity changed; refusing to stop a process")
     # On Windows SIGTERM terminates the selected PID immediately. Require the
     # live token; RC7 also reports its PID, while legacy Bridges lack that field.
     health = health_at(port)
@@ -421,6 +547,10 @@ def build_parser() -> argparse.ArgumentParser:
     ensure = subparsers.add_parser("ensure", help="ensure a healthy Bridge and print the page URL")
     ensure.add_argument("--page", choices=("assessment", "daily-page"), required=True)
     ensure.add_argument("--default-port", type=int, default=DEFAULT_PORT)
+    verify = subparsers.add_parser("verify-page", help="check the prepared WorkBuddy page without writes")
+    verify.add_argument("--page", choices=("assessment", "daily-page"), required=True)
+    verify.add_argument("--date", required=True)
+    verify.add_argument("--runtime-id", required=True)
     subparsers.add_parser("status", help="show Bridge health for this workspace")
     subparsers.add_parser("stop", help="stop only the verified Bridge for this workspace")
     return parser
@@ -435,12 +565,19 @@ def main() -> int:
             )
         elif args.command == "status":
             result = bridge_status(args.workspace)
+        elif args.command == "verify-page":
+            result = verify_page(args.workspace, page=args.page, flow_date=args.date,
+                                 runtime_id=args.runtime_id)
         else:
             result = stop_bridge(args.workspace)
     except (OSError, ValueError, WorkspaceRuntimeError) as error:
-        raise SystemExit(f"error: {error}") from error
+        if args.command != "verify-page":
+            raise SystemExit(f"error: {error}") from error
+        result = {"status": "page_not_ready", "page": args.page, "flow_date": args.date,
+                  "page_opened": False, "next_action": "preserve_draft_then_recover_bridge",
+                  "error": str(error)}
     print(json.dumps(result, ensure_ascii=False, indent=2))
-    return 0
+    return 1 if result["status"] == "page_not_ready" else 0
 
 
 if __name__ == "__main__":

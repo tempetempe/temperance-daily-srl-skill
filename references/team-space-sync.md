@@ -1,6 +1,6 @@
-# WorkBuddy 团队空间同步（RC6 组合入口）
+# WorkBuddy 团队空间同步
 
-在当天 final 双记录已核验保存后、final 同日内容更新后，或重试本版已登记任务时读取。RC6 仅将固定步骤及真实写入结果登记交给程序，保留 RC4 轻量确认与 RC5 按需加载。本地保存先完成，云端失败不回滚、不改变学习事实。
+在当天 final 双记录已核验保存后、final 同日内容更新后，或重试已登记任务时读取。本地保存先完成，云端失败不回滚、不改变学习事实。
 
 正常入口是 `scripts/sync_flow.py`：**发现当前空间 → 准备 final 一致快照 → 一次完整目录查重 → 正式上传或受控更新 → 立即登记真实回执 → 按返回 ID 确认元数据**。必要云操作仍执行，模型不逐项接力、不手工制作回执／目录证据 JSON。旧 `team_space_delivery.py`、`team_space_sync.py`、`document_readback.py` 保留兼容和明确要求的诊断，不再作为日常逐条编排或全文回读流程。
 
@@ -8,13 +8,13 @@
 
 ## 当前宿主与正式能力
 
-WorkBuddy 是主要宿主。先从当前宿主正式 Skill 目录／加载入口读取内置 `library` 的 `SKILL.md` 与 `manage/entry.md`。最初未展示全部工具，不代表缺能力。确认其他宿主只用本地；正式加载／查询失败不能当作零匹配。
+WorkBuddy 是主要宿主。先从当前宿主正式 Skill 目录／加载入口读取内置 `library` 的 `SKILL.md` 与 `manage/entry.md`。最初未展示全部工具，不代表缺能力。由宿主确认当前无资料库时，直接保留本地，不调用同步程序。只有完整查询成功才能判断零匹配。正式入口加载失败、目录不可读和空间查询失败都是待排查的同步失败。
 
 以正式加载结果提供的 library 根目录作为独立变量 `library_skill_dir`，不照抄可能指向本 Skill 的 `${CODEBUDDY_SKILL_DIR}`，不硬编码 Mac 路径。Windows 使用当前宿主提供的实际目录和 Python 解释器。不能扫描磁盘／账号缓存、读取凭证、猜内部端点或修改安装包。
 
-`workbuddy_library.py` 提供官方 library 0.6.x 只读合同适配；`library_transfer.py` 按受支持的正式写入脚本合同调用，不自行鉴权。写入前检查当前脚本的参数与成功返回格式，合同不兼容保留待处理，不发明调用或让学习者选择技术替代方案。官方说明与当前正式帮助仍是实际权限及操作合同依据。
+`workbuddy_library.py` 从官方入口完整枚举当前账号的团队空间。发现目标和执行同步都不需要 WorkBuddy 或 library 的版本号。选定目标后，按操作实际需要调用目录查重、写入或节点确认。 `library_transfer.py` 在写入前检查当前官方脚本所需的参数和回执合同。接口不可用时保留本地记录及已登记的任务，按实际出错步骤说明；官方说明与当前正式帮助仍是权限及调用依据。
 
-同一会话、同一安装版本，完整规则仍在上下文时复用；版本变化、上下文缺失或合同不明时重新读取。规则复用不替代当前账号、目标和云端状态的新查询。正常同步不加载原文件下载、文档全文读取和逐字比对说明。
+同一会话中已读取且仍适用的规则可以复用，规则缺失或接口发生变化时重新读取当前说明。每次发现仍使用当前账号及其实际可访问的空间。正常同步不加载原文件下载、文档全文读取和逐字比对说明。
 
 ## 正常组合调用
 
@@ -35,9 +35,9 @@ WorkBuddy 是主要宿主。先从当前宿主正式 Skill 目录／加载入口
 <python> <skill>/scripts/sync_flow.py --workspace <root> --library-dir <library> --session-id <session> run --job-id <job> --token <token> --execute
 ```
 
-`--execute` 表示宿主已掌握当前正式写入规则，是内部执行开关，不是向学习者再次申请同步许可。相应规则已经完整在上下文时，首次 `run --day YYYY-MM-DD` 可直接加 `--execute`，省去一次模型接力。该开关不绕过账号、权限、查重、版本及正式合同检查。只有已写待确认的任务无需写入开关或重新加载写入说明，程序仅补相应节点元数据。
+`--execute` 表示宿主已掌握当前正式写入规则，是内部执行开关，不是向学习者再次申请同步许可。相应规则已经完整在上下文时，首次 `run --day YYYY-MM-DD` 可直接加 `--execute`，省去一次模型接力。调用仍检查账号、权限、查重、受控镜像修订号和正式合同。只剩已写节点待确认时，即使当前写入能力不可用，程序也只补相应节点元数据。
 
-`blocked`、权限或能力不足等未完成结果保留实际状态；若 artifacts 显示 `uploading`／`uncertain` 且 `next_action=stop_uncertain_write`，停止写入，不能重发。`awaiting_confirmation` 及 `confirm_recorded_node` 表示保留已有写入，只补元数据确认。合同或证据不满足时不退回手写成功 JSON，不另造上传包装程序。执行中断后先走同一已登记任务恢复，不能把调用重发当作成功验证。
+`blocked`、权限或能力不足等未完成结果保留实际状态。根据 `stage` 区分官方入口（`library_entry`）、空间查询（`space_discovery`）、目录查重（`directory_lookup`）、写入前检查（`write_preflight`）、写入（`write`）或确认（`confirmation`）失败。写入能力恢复后，重新 `discover` 取得当前 token，再按同一 `job_id` 恢复。若 artifacts 显示 `uploading`／`uncertain` 且 `next_action=stop_uncertain_write`，停止写入，不能重发。`next_action=confirm_recorded_node` 表示保留已有写入，只补元数据确认。合同或证据不满足时不退回手写成功 JSON，不另造上传包装程序。执行中断后先走同一已登记任务恢复，不能把调用重发当作成功验证。
 
 只需发现空间、尚不处理某日记录时，可使用相同全局参数后的 `discover`。它不进行上传，不用它额外重复正常 `run` 已完成的发现。
 

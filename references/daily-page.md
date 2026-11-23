@@ -62,7 +62,7 @@ python3 <skill-package>/scripts/page_flow.py \
   --workspace <workspace-root> daily-page
 ```
 
-The combined entry performs workspace readiness, generation/recovery and Bridge checks. Do not separately rerun ensure, generator or readiness on its normal successful path. It returns `status=ready`, `operation=generated|resumed`, `flow_date`, validated task/path information, `page_url`, and `page_opened=false`. The host still opens the page. Existing same-day content is resumed, never silently rebuilt; newly supplied handoff data is not reapplied on resume and the result says so. If a confirmed change must be applied to an existing learner page, preserve current State and use its editable page under the learner's current intent rather than force-generation.
+The combined entry performs workspace readiness, generation/recovery and initial Bridge checks. In WorkBuddy, append the appropriate `--bridge-mode` from the [shared page handoff](assessment-persistence.md#workbuddy-page-handoff-assessment-and-daily-page) and use its separate check with `--page daily-page`. The default mode for other hosts returns `status=ready`, `operation=generated|resumed`, `flow_date`, validated task/path information, `page_url`, and `page_opened=false`. Existing same-day content is resumed, never silently rebuilt; newly supplied handoff data is not reapplied on resume and the result says so. If a confirmed change must be applied to an existing learner page, preserve current State and use its editable page under the learner's current intent rather than force-generation.
 
 Low-level `generate_daily_page.py` is retained for deliberate maintenance, not ordinary re-entry. Its options:
 
@@ -76,7 +76,7 @@ Bootstrap and Assessment do not create Daily Page files. Only the clear Generate
 
 ## Page and Bridge
 
-Open the combined entry's returned `page_url`; a printed URL alone is not delivery. The helper reuses a healthy same-workspace Bridge or starts/verifies one, with dynamic-port fallback. If content is ready but the Bridge fails, `status=page_not_ready` / `local_content_ready=true` preserves it; retry the combined entry to recover/reopen without generation. Standalone `bridge_readiness.py ... ensure --page daily-page` remains for recovery/diagnosis, not an automatic repeat after success. The learner never manages the server.
+Open the URL returned by the WorkBuddy handoff check or the default combined entry on other hosts. If content is ready but Bridge preparation fails, `status=page_not_ready` / `local_content_ready=true` identifies the preserved page. Follow the [shared recovery steps](assessment-persistence.md#workbuddy-page-handoff-assessment-and-daily-page) in WorkBuddy to recover the service and reopen without regenerating. Standalone `bridge_readiness.py ... ensure --page daily-page` remains for diagnosis. The learner never manages the server.
 
 Before inviting execution, verify the generated State contains every saved Assessment task with the same IDs/date and faithfully represents selected actions. Verify the readiness result and that the host opened the correct Daily Page, not a template, Assessment, or old-day page. Existing helpers verify State and page access; they cannot certify dialogue quality or host display. A URL returned without a successful host open is not delivered. On failure, retain state and explain the remaining delivery problem plainly; do not say “开始吧” or ask the learner to manage the protocol.
 

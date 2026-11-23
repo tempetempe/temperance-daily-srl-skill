@@ -2,7 +2,7 @@
 
 Name：**DC-Daily SRL Skill**
 
-![Version](https://img.shields.io/badge/version-7.1.0-2F6F5E?style=flat-square)
+![Version](https://img.shields.io/badge/version-7.2.0-2F6F5E?style=flat-square)
 ![AI 学习管理工具](https://img.shields.io/badge/AI-%E5%AD%A6%E4%B9%A0%E7%AE%A1%E7%90%86%E5%B7%A5%E5%85%B7-2F6F5E?style=flat-square)
 ![Local-first](https://img.shields.io/badge/data-Local--first-40695B?style=flat-square)
 ![Language](https://img.shields.io/badge/language-中文-D99A2B?style=flat-square)
@@ -107,12 +107,14 @@ Name：**DC-Daily SRL Skill**
 在支持 `.agents/skills/` 的 Agent 项目目录中运行：
 
 ```sh
-git clone --branch v7.1-name-update --depth 1 https://github.com/tempetempe/temperance-daily-srl-skill.git .agents/skills/dc-daily-srl-skill
+git clone --branch v7.2 --depth 1 https://github.com/tempetempe/temperance-daily-srl-skill.git .agents/skills/dc-daily-srl-skill
 ```
+
+WorkBuddy 用户也可以从 [7.2 发布页](https://github.com/tempetempe/temperance-daily-srl-skill/releases/tag/v7.2) 下载 ZIP，在技能管理中导入。
 
 ## 当前版本
 
-当前正式版本：**7.1.0**，发布于 2026-10-22。
+当前正式版本为 **7.2.0**，发布于 2026-11-23。
 
 ## 许可
 
